@@ -4,3 +4,8 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+egg = "0.10.0"
+
+[patch.crates-io]
+# egg = { git = "https://github.com/mlb2251/egg", rev = "196d7d4"}
+egg = { path = "../egg"}
