@@ -11,8 +11,10 @@ pub struct Pattern {
 impl Pattern {
     /// Creates the initial #?0 pattern which is just a single hole
     pub fn single_hole() -> Self {
+        // annoyingly parsing "#?0" doesn't create a ENodeOrVar::Var it creates an ENodeOrVar::ENode
+        let rec_expr: egg::RecExpr<ENodeOrVar<StitchLang>>  = vec![ENodeOrVar::Var(egg::Var::from(0))].into();
         Pattern {
-            pattern: "#?0".parse().unwrap(),
+            pattern: rec_expr,
             holes: vec![0.into()],
             max_var: 0,
         }
@@ -55,6 +57,8 @@ impl Pattern {
             self.new_hole(hole_id);
             new_node.children[j] = hole_id;
         }
-        self.pattern.nodes[usize::from(i) + num_holes] = ENodeOrVar::ENode(new_node);
+        let replace_at = usize::from(i) + num_holes;
+        assert!(matches!(self.pattern.nodes[replace_at], ENodeOrVar::Var(_)), "Attempting to expand a non-var");
+        self.pattern.nodes[replace_at] = ENodeOrVar::ENode(new_node);
     }
 }
