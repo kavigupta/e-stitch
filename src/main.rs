@@ -1,21 +1,33 @@
+mod lang;
+
+use lang::StitchLang;
+
 fn main() {
-    let egraph = load_egraph::<egg::SymbolLang>("data/domains/simple-arithmetic/aplusbplusc.json");
-    println!("{:#?}", egraph.dump());
+    let (egraph, root) = load_egraph::<StitchLang>("data/domains/simple-arithmetic/aplusbplusc.json");
+    let extractor = egg::Extractor::new(&egraph, egg::AstSize);
+    let (_, term) = extractor.find_best(root);
+    println!("{}", term);
 }
 
 /// Loads a JSON file containing s-expressions and builds an egraph from them.
-/// Returns an egraph with all expressions added and rebuilt.
-fn load_egraph<L: egg::Language + egg::FromOp>(filename: &str) -> egg::EGraph<L, ()> {
+/// All programs are combined into a single term (programs A B C ...).
+/// Returns the egraph and the root e-class Id of the programs node.
+fn load_egraph<L: egg::Language + egg::FromOp>(filename: &str) -> (egg::EGraph<L, ()>, egg::Id) {
     let contents = std::fs::read_to_string(filename).expect("Failed to read file");
     let exprs: Vec<String> = serde_json::from_str(&contents).expect("Failed to parse JSON");
 
     let mut egraph = egg::EGraph::default();
+    let mut expr_ids = Vec::new();
+
     for expr_str in &exprs {
         let expr: egg::RecExpr<L> = expr_str.parse().expect("Failed to parse expression");
-        egraph.add_expr(&expr);
+        expr_ids.push(egraph.add_expr(&expr));
     }
+
+    let programs_node = L::from_op("programs", expr_ids).expect("Failed to create programs node");
+    let root = egraph.add(programs_node);
     egraph.rebuild();
-    egraph
+    (egraph, root)
 }
 
 pub struct SharedSearchData<L: egg::Language> {
