@@ -13,13 +13,23 @@ fn main() {
     let (_, term) = extractor.find_best(root);
     util::print_programs(&term);
 
-    let mut pattern = Pattern::single_hole();
+    let mut pattern = Pattern::single_var();
     println!("before expansion: {:?}", pattern.pattern.nodes);
     println!("before expansion: {}", pattern.pattern);
 
     pattern.expand(0, &StitchLang{op: "+".into(), children: vec![2.into(), 3.into()]});
     println!("after expansion: {:?}", pattern.pattern.nodes);
     println!("after expansion: {}", pattern.pattern);
+
+    let shared = SharedSearchData { egraph };
+    let mut search_state = SearchState::new(&shared);
+    println!("search state: {}", search_state);
+
+    while search_state.pattern.vars.len() > 0 {
+        search_state.expand_random(&shared);
+        println!("search state: {}", search_state);
+    }
+
 
 }
 
