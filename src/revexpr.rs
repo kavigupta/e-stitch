@@ -22,6 +22,7 @@ impl<L: egg::FromOp> std::str::FromStr for RevExpr<L> {
 
 impl<L: egg::Language + std::fmt::Display> std::fmt::Display for RevExpr<L> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        // somewhat silly clone now but it's okay – display isn't performance critical and isn't a huge clone
         let recexpr: egg::RecExpr<L> = self.clone().into();
         std::fmt::Display::fmt(&recexpr, f)
     }
