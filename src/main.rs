@@ -2,10 +2,12 @@ mod lang;
 mod util;
 mod pattern;
 mod search;
+mod revexpr;
 
 use lang::StitchLang;
 use pattern::Pattern;
 use search::{SharedSearchData, SearchState};
+use revexpr::RevExpr;
 
 fn main() {
     let (egraph, root) = util::load_egraph::<StitchLang>("data/domains/simple-arithmetic/aplusbplusc.json");

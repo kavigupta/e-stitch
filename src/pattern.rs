@@ -1,5 +1,6 @@
 use crate::lang::StitchLang;
 use egg::{Language, ENodeOrVar, Id};
+use crate::revexpr::RevExpr;
 
 #[derive(Debug)]
 pub struct Pattern {
@@ -36,7 +37,7 @@ impl Pattern {
                 *var = Id::from(1 + usize::from(*var));
             }
         }
-        self.pattern.nodes.insert(i, node);
+        &mut self.pattern.nodes.insert(i, node);
     }
 
     pub fn new_var(&mut self, i: Id) {
