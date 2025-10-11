@@ -1,9 +1,21 @@
 fn main() {
-    let shared = SharedSearchData {
-        egraph: egg::EGraph::<egg::SymbolLang, ()>::default(),
-    };
-    let state = SearchState::empty(&shared);
-    println!("{:?}", state);
+    let egraph = load_egraph::<egg::SymbolLang>("data/domains/simple-arithmetic/aplusbplusc.json");
+    println!("{:#?}", egraph.dump());
+}
+
+/// Loads a JSON file containing s-expressions and builds an egraph from them.
+/// Returns an egraph with all expressions added and rebuilt.
+fn load_egraph<L: egg::Language + egg::FromOp>(filename: &str) -> egg::EGraph<L, ()> {
+    let contents = std::fs::read_to_string(filename).expect("Failed to read file");
+    let exprs: Vec<String> = serde_json::from_str(&contents).expect("Failed to parse JSON");
+
+    let mut egraph = egg::EGraph::default();
+    for expr_str in &exprs {
+        let expr: egg::RecExpr<L> = expr_str.parse().expect("Failed to parse expression");
+        egraph.add_expr(&expr);
+    }
+    egraph.rebuild();
+    egraph
 }
 
 pub struct SharedSearchData<L: egg::Language> {
