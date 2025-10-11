@@ -41,7 +41,6 @@ checksum = "d0a5c400df2834b80a4c3327b3aad3a4c4cd4de0629063962b03235697506a28"
 [[package]]
 name = "egg"
 version = "0.10.0"
-source = "git+https://github.com/mlb2251/egg?rev=196d7d4#196d7d4ba09fcbc28f9a35d206f54d45e24f8410"
 dependencies = [
  "env_logger",
  "hashbrown 0.15.5",
