@@ -14,17 +14,12 @@ fn main() {
     util::print_programs(&term);
 
     let mut pattern = Pattern::single_hole();
-    println!("{}", pattern.pattern);
-    println!("{:?}", pattern.pattern.nodes);
-    
+    println!("before expansion: {:?}", pattern.pattern.nodes);
+    println!("before expansion: {}", pattern.pattern);
 
-    let recexpr: egg::RecExpr<StitchLang> = "(+ 2 3)".parse().unwrap();
-    println!("{}", recexpr);
-    println!("{:?}", recexpr.nodes);
-
-    pattern.expand(0.into(), &StitchLang{op: "+".into(), children: vec![2.into(), 3.into()]});
-    println!("{}", pattern.pattern);
-    println!("{:?}", pattern.pattern.nodes);
+    pattern.expand(0, &StitchLang{op: "+".into(), children: vec![2.into(), 3.into()]});
+    println!("after expansion: {:?}", pattern.pattern.nodes);
+    println!("after expansion: {}", pattern.pattern);
 
 }
 
