@@ -25,12 +25,16 @@ impl StitchLang {
 }
 
 impl Language for StitchLang {
+    /// Used for short-circuiting the search for equivalent nodes.
     type Discriminant = Symbol;
 
     fn discriminant(&self) -> Self::Discriminant {
         self.op
     }
 
+    /// Returns true if this enode matches another enode.
+    /// This should only consider the operator and the arity,
+    /// not the children `Id`s.
     fn matches(&self, other: &Self) -> bool {
         self.op == other.op && self.len() == other.len()
     }
