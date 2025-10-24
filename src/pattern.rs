@@ -2,7 +2,7 @@ use crate::lang::StitchLang;
 use egg::{Language, ENodeOrVar, Id};
 use crate::revexpr::RevExpr;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Pattern {
     pub pattern: RevExpr<ENodeOrVar<StitchLang>>,
     pub vars: Vec<Id>,
