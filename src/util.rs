@@ -1,9 +1,10 @@
 use crate::lang::StitchLang;
+use egg::FromOp;
 
 /// Loads a JSON file containing s-expressions and builds an egraph from them.
 /// All programs are combined into a single term (programs A B C ...).
 /// Returns the egraph and the root e-class Id of the programs node.
-pub fn load_egraph<L: egg::Language + egg::FromOp>(filename: &str) -> (egg::EGraph<L, ()>, egg::Id) {
+pub fn load_egraph(filename: &str) -> (egg::EGraph<StitchLang, ()>, egg::Id) {
     let contents = std::fs::read_to_string(filename).expect("Failed to read file");
     let exprs: Vec<String> = serde_json::from_str(&contents).expect("Failed to parse JSON");
 
@@ -12,23 +13,23 @@ pub fn load_egraph<L: egg::Language + egg::FromOp>(filename: &str) -> (egg::EGra
     let mut expr_ids = Vec::new();
 
     for expr_str in &exprs {
-        let expr: egg::RecExpr<L> = expr_str.parse().expect("Failed to parse expression");
+        let expr: egg::RecExpr<StitchLang> = expr_str.parse().expect("Failed to parse expression");
         expr_ids.push(egraph.add_expr(&expr));
     }
 
-    let programs_node = L::from_op("programs", expr_ids).expect("Failed to create programs node");
+    let programs_node = StitchLang::from_op("programs", expr_ids).expect("Failed to create programs node");
     let root = egraph.add(programs_node);
-    let rules: &[Vec<egg::Rewrite<L, ()>>; _]    = &[
-        egg::rewrite!("commute_add"; "(+ ?a ?b)" <=> "(+ ?b ?a)"),
+    let rules: Vec<egg::Rewrite<StitchLang, ()>>    = vec![
+        egg::rewrite!("commute_add"; "(+ ?a ?b)" => "(+ ?b ?a)"),
     ];
     egraph.rebuild(); // might be unnecessary
-    let mut runner: egg::Runner<L, ()> = egg::Runner::default();
-    runner.with_egraph(egraph)
+    let mut runner: egg::Runner<StitchLang, ()> = egg::Runner::default();
+    runner = runner.with_egraph(egraph)
         .with_iter_limit(10)
-        .run(rules);
+        .run(&rules);
 
-    egraph.rebuild(); // might be unnecessary
-    (egraph, root)
+    runner.egraph.rebuild(); // might be unnecessary
+    (runner.egraph, root)
 }
 
 /// Prints a programs term with each child on a new line.

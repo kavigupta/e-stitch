@@ -9,7 +9,7 @@ use pattern::Pattern;
 use search::{SharedSearchData, SearchState};
 
 fn main() {
-    let (egraph, root) = util::load_egraph::<StitchLang>("data/domains/simple-arithmetic/aplusbplusc.json");
+    let (egraph, root) = util::load_egraph("data/domains/simple-arithmetic/aplusbplusc.json");
     let extractor = egg::Extractor::new(&egraph, egg::AstSize);
     let (_, term) = extractor.find_best(root);
     util::print_programs(&term);
