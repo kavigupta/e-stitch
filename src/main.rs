@@ -30,16 +30,16 @@ fn main() {
 
     while search_state.pattern.vars.len() > 0 {
         search_state.expand_random(&shared);
-        println!("cost: {}", compute_cost(shared.egraph.clone(), root, &search_state));
-        
+        println!("cost: {}", compute_cost(&shared.egraph, root, &search_state));
     }
 
 
 }
 
 
-fn compute_cost(egraph: egg::EGraph<StitchLang, ()>, root: egg::Id, search_state: &SearchState) -> usize {
-    let mut egraph = egraph;
+fn compute_cost(egraph: &egg::EGraph<StitchLang, ()>, root: egg::Id, search_state: &SearchState) -> usize {
+    let mut egraph = egraph.clone(); // todo be smarter
+
     println!("search state: {}", search_state);
     for m in &search_state.matches {
         // println!("match at eclass {}: {:?}", m.root_eclass, m.substs);
@@ -55,3 +55,5 @@ fn compute_cost(egraph: egg::EGraph<StitchLang, ()>, root: egg::Id, search_state
     util::print_programs(&term);
     cost
 }
+
+
