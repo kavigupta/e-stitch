@@ -21,6 +21,8 @@ pub fn load_egraph(filename: &str) -> (egg::EGraph<StitchLang, ()>, egg::Id) {
     let root = egraph.add(programs_node);
     let rules: Vec<egg::Rewrite<StitchLang, ()>>    = vec![
         egg::rewrite!("commute_add"; "(+ ?a ?b)" => "(+ ?b ?a)"),
+        egg::rewrite!("assoc_add"; "(+ ?a (+ ?b ?c))" => "(+ (+ ?a ?b) ?c)"),
+        egg::rewrite!("identity_add"; "(+ ?a 0)" => "?a"),
     ];
     egraph.rebuild(); // might be unnecessary
     let mut runner: egg::Runner<StitchLang, ()> = egg::Runner::default();
