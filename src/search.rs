@@ -1,11 +1,11 @@
-use crate::lang::StitchLang;
+use crate::{lang::StitchLang, smc::StitchEgraph};
 use crate::pattern::Pattern;
 use egg::{Id, Language};
 use rand::Rng;
 
 #[derive(Debug)]
 pub struct SharedSearchData {
-    pub egraph: egg::EGraph<StitchLang, ()>,
+    pub egraph: StitchEgraph,
 }
 
 #[derive(Debug, Clone)]
@@ -92,7 +92,7 @@ impl MatchAtEClass {
     }
 }
 
-fn identity_matches(egraph: &egg::EGraph<StitchLang, ()>) -> Vec<MatchAtEClass> {
+fn identity_matches(egraph: &StitchEgraph) -> Vec<MatchAtEClass> {
     egraph.classes().map(|c| MatchAtEClass::identity_match(c.id)).collect()
 }
 

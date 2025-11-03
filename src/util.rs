@@ -1,14 +1,14 @@
-use crate::lang::StitchLang;
+use crate::{lang::StitchLang, smc::{StitchAnalysis, StitchEgraph}};
 use egg::FromOp;
 
 /// Loads a JSON file containing s-expressions and builds an egraph from them.
 /// All programs are combined into a single term (programs A B C ...).
 /// Returns the egraph and the root e-class Id of the programs node.
-pub fn load_egraph(filename: &str) -> (egg::EGraph<StitchLang, ()>, egg::Id) {
+pub fn load_egraph(filename: &str) -> (StitchEgraph, egg::Id) {
     let contents = std::fs::read_to_string(filename).expect("Failed to read file");
     let exprs: Vec<String> = serde_json::from_str(&contents).expect("Failed to parse JSON");
 
-    let mut egraph = egg::EGraph::default();
+    let mut egraph: StitchEgraph = egg::EGraph::default();
 
     let mut expr_ids = Vec::new();
 
@@ -19,13 +19,13 @@ pub fn load_egraph(filename: &str) -> (egg::EGraph<StitchLang, ()>, egg::Id) {
 
     let programs_node = StitchLang::from_op("programs", expr_ids).expect("Failed to create programs node");
     let root = egraph.add(programs_node);
-    let rules: Vec<egg::Rewrite<StitchLang, ()>>    = vec![
+    let rules: Vec<egg::Rewrite<StitchLang, StitchAnalysis>>    = vec![
         egg::rewrite!("commute_add"; "(+ ?a ?b)" => "(+ ?b ?a)"),
         egg::rewrite!("assoc_add"; "(+ ?a (+ ?b ?c))" => "(+ (+ ?a ?b) ?c)"),
         egg::rewrite!("identity_add"; "(+ ?a 0)" => "?a"),
     ];
     egraph.rebuild(); // might be unnecessary
-    let mut runner: egg::Runner<StitchLang, ()> = egg::Runner::default();
+    let mut runner: egg::Runner<StitchLang, StitchAnalysis> = egg::Runner::default();
     runner = runner.with_egraph(egraph)
         .with_iter_limit(10)
         .run(&rules);

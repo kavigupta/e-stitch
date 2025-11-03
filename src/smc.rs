@@ -1,12 +1,40 @@
+use std::cmp::min;
+
 use crate::lang::StitchLang;
 use crate::pattern::Pattern;
 use crate::search::{SearchState, SharedSearchData};
+use egg::{Analysis, Id};
 use rand::Rng;
 
-pub fn smc(egraph: egg::EGraph<StitchLang, ()>, root: egg::Id) -> Option<(usize, SearchState)> {
+#[derive(Clone, Debug, Default)]
+pub struct StitchAnalysis;
+
+impl Analysis<StitchLang> for StitchAnalysis {
+    type Data = u32;
+
+    fn make(egraph: &mut egg::EGraph<StitchLang, Self>, enode: &StitchLang, _id: egg::Id) -> Self::Data {
+        1 + enode.children.iter().map(|&child_id| egraph[child_id].data).sum::<u32>()
+    }
+
+    fn merge(&mut self, to: &mut Self::Data, from: Self::Data) -> egg::DidMerge {
+        if from < *to {
+            *to = from;
+            egg::DidMerge(true, false)
+        } else if from == *to {
+            egg::DidMerge(false, false)
+        } else {
+            // from = *to; but we don't do this because types; idk it seems like they don't want us to
+            egg::DidMerge(false, true)
+        }
+    }
+}
+
+pub type StitchEgraph = egg::EGraph<StitchLang, StitchAnalysis>;
+
+pub fn smc(egraph: StitchEgraph, root: egg::Id) -> Option<(usize, SearchState)> {
     let shared = SharedSearchData { egraph };
 
-    let num_particles = 100carg;
+    let num_particles = 100;
     let num_steps = 1000;
     let temperature = 1.0;
 
@@ -61,7 +89,7 @@ pub fn smc(egraph: egg::EGraph<StitchLang, ()>, root: egg::Id) -> Option<(usize,
         }).collect();
     }
 
-    let (cost, term) = rewrite(&shared.egraph, root, &best_so_far.as_ref().unwrap().1);
+    let (cost) = rewrite(&shared.egraph, root, &best_so_far.as_ref().unwrap().1);
     println!("best: {}", cost);
     // crate::util::print_programs(&term);
 
@@ -94,22 +122,23 @@ pub fn normalize_and_accumulate(weights: &mut Vec<f64>) {
 }
 
 pub fn compute_cost(
-    egraph: &egg::EGraph<StitchLang, ()>,
+    egraph: &StitchEgraph,
     root: egg::Id,
     search_state: &SearchState,
 ) -> usize {
-    let (cost, _) = rewrite(egraph, root, search_state);
+    let cost = rewrite(egraph, root, search_state);
     return cost;
 }
 
 pub fn rewrite(
-    egraph: &egg::EGraph<StitchLang, ()>,
+    egraph: &StitchEgraph,
     root: egg::Id,
     search_state: &SearchState,
-) -> (usize, egg::RecExpr<StitchLang>) {
+) -> usize {
     let mut egraph = egraph.clone(); // todo be smarter
 
     // println!("search state: {}", search_state);
+    // let mut nodes = vec![];
     for m in &search_state.matches {
         // println!("match at eclass {}: {:?}", m.root_eclass, m.substs);
         for subst in &m.substs {
@@ -119,10 +148,19 @@ pub fn rewrite(
             };
             let x = egraph.add(node);
             egraph.union(x, m.root_eclass);
+            // nodes.push(x);
         }
     }
     egraph.rebuild();
-    let extractor = egg::Extractor::new(&egraph, egg::AstSize);
-    let (cost, term) = extractor.find_best(root);
-    return (cost, term);
+    // let extractor = egg::Extractor::new(&egraph, egg::AstSize);
+    // let (cost, term) = extractor.find_best(root);
+    // for n in nodes {
+    //     egraph
+    // }
+    // assert_eq!(egraph[root].data as usize, cost);
+    // println!("cost from extractor: {}", cost);
+    // println!("cost from egraph: {}", egraph[root].data);
+    let cost = egraph[root].data as usize;
+    cost
+    // return (cost, term);
 }
