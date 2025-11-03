@@ -6,8 +6,8 @@ use rand::Rng;
 pub fn smc(egraph: egg::EGraph<StitchLang, ()>, root: egg::Id) -> Option<(usize, SearchState)> {
     let shared = SharedSearchData { egraph };
 
-    let num_particles = 10;
-    let num_steps = 10;
+    let num_particles = 100carg;
+    let num_steps = 1000;
     let temperature = 1.0;
 
     let mut best_so_far: Option<(usize, SearchState)> = None;
@@ -34,7 +34,12 @@ pub fn smc(egraph: egg::EGraph<StitchLang, ()>, root: egg::Id) -> Option<(usize,
             }
         }
 
-        let mut weights: Vec<f64> = costs.iter().map(|cost| (-(*cost as f64)/temperature).exp()).collect();
+
+        let mut weights: Vec<f64> = costs.iter().map(|cost| (-(*cost as f64)/temperature)).collect();
+        let max_weight = weights.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+        for w in &mut weights {
+            *w = (*w - max_weight).exp();
+        }
 
         // force no resampling of completed patterns
         for (i, state) in search_states.iter().enumerate() {
@@ -58,7 +63,7 @@ pub fn smc(egraph: egg::EGraph<StitchLang, ()>, root: egg::Id) -> Option<(usize,
 
     let (cost, term) = rewrite(&shared.egraph, root, &best_so_far.as_ref().unwrap().1);
     println!("best: {}", cost);
-    crate::util::print_programs(&term);
+    // crate::util::print_programs(&term);
 
     return best_so_far;
 }

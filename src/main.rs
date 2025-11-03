@@ -11,7 +11,7 @@ use search::{SharedSearchData, SearchState};
 use smc::compute_cost;
 
 fn main() {
-    let (egraph, root) = util::load_egraph("data/domains/simple-arithmetic/aplusbplus1234.json");
+    let (egraph, root) = util::load_egraph("data/domains/cogsci/nuts-bolts.json");
 
     smc::smc(egraph, root);
 
