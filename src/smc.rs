@@ -1,10 +1,12 @@
-use std::cmp::min;
+use std::cmp::{Reverse, min};
 
 use crate::lang::StitchLang;
 use crate::pattern::Pattern;
-use crate::search::{SearchState, SharedSearchData};
+use crate::search::{SearchState, SharedSearchData, Subst};
 use egg::{Analysis, Id};
+use priority_queue::PriorityQueue;
 use rand::Rng;
+use rustc_hash::{FxHashMap};
 
 #[derive(Clone, Debug, Default)]
 pub struct StitchAnalysis;
@@ -130,7 +132,74 @@ pub fn compute_cost(
     return cost;
 }
 
-pub fn rewrite(
+pub fn rewrite_utility(
+    egraph: &StitchEgraph,
+    root: egg::Id,
+    search_state: &SearchState,
+) -> f64 {
+    let cost = rewrite(egraph, root, search_state);
+    // utility is negative cost
+    return -(cost as f64);
+}
+
+fn rewrite(
+    egraph: &StitchEgraph,
+    root: egg::Id,
+    search_state: &SearchState,
+) -> usize {
+    // rewrite_slow(egraph, root, search_state)
+    let mut size_under_rewrite = FxHashMap::<Id, i64>::default();
+    let mut work_queue = PriorityQueue::new();
+    let mut eclass_to_matches = FxHashMap::<Id, &Vec<Subst>>::default();
+
+    let get_size = |eclass: Id, s_u_r: &FxHashMap<Id, i64>| -> i64 {
+        s_u_r.get(&eclass).cloned().unwrap_or(egraph[eclass].data as i64)
+    };
+
+    for m in &search_state.matches {
+        work_queue.push(m.root_eclass, Reverse(m.root_eclass));
+        eclass_to_matches.insert(m.root_eclass, &m.substs);
+    }
+    while let Some((eclass, Reverse(_))) = work_queue.pop() {
+        // assert!(!size_under_rewrite.contains_key(&eclass));
+        let size_current = get_size(eclass, &size_under_rewrite);
+        let mut best = size_current;
+        // trying a rewrite; (fn_i arg0 ...)
+        if let Some(substs) = eclass_to_matches.get(&eclass) {
+            for subst in *substs {
+                let mut size_new: i64 = 1;
+                for &var in &subst.vars {
+                    size_new += get_size(var, &size_under_rewrite);
+                }
+                if size_new < best {
+                    best = size_new;
+                }
+            }
+        }
+        // not doing a rewrite (just try all the enocdes)
+        if let Some(enode) = egraph[eclass].nodes.first() {
+            let mut size_no_rewrite: i64 = 1;
+            for &child in &enode.children {
+                size_no_rewrite += get_size(child, &size_under_rewrite);
+            }
+            if size_no_rewrite < best {
+                best = size_no_rewrite;
+            }
+        }
+        if best < size_current {
+            for parent in egraph[eclass].parents() {
+                work_queue.push(parent, Reverse(parent));
+            }
+            size_under_rewrite.insert(eclass, best);
+        }
+    }
+    let final_size = size_under_rewrite.get(&root).cloned().unwrap_or(egraph[root].data as i64);
+    // let slow_size = rewrite_slow(egraph, root, search_state) as i64;
+    // assert_eq!(final_size, slow_size, "Fast rewrite size {} != slow rewrite size {}", final_size, slow_size);
+    final_size as usize
+}
+
+pub fn rewrite_slow(
     egraph: &StitchEgraph,
     root: egg::Id,
     search_state: &SearchState,
