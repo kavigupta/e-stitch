@@ -1,4 +1,5 @@
 use std::cmp::{Reverse, min};
+use std::collections::BinaryHeap;
 
 use crate::lang::StitchLang;
 use crate::pattern::Pattern;
@@ -149,7 +150,7 @@ fn rewrite(
 ) -> usize {
     // rewrite_slow(egraph, root, search_state)
     let mut size_under_rewrite = FxHashMap::<Id, i64>::default();
-    let mut work_queue = PriorityQueue::new();
+    let mut work_queue = BinaryHeap::new();
     let mut eclass_to_matches = FxHashMap::<Id, &Vec<Subst>>::default();
 
     let get_size = |eclass: Id, s_u_r: &FxHashMap<Id, i64>| -> i64 {
@@ -157,11 +158,14 @@ fn rewrite(
     };
 
     for m in &search_state.matches {
-        work_queue.push(m.root_eclass, Reverse(m.root_eclass));
+        work_queue.push(Reverse(m.root_eclass));
         eclass_to_matches.insert(m.root_eclass, &m.substs);
     }
-    while let Some((eclass, Reverse(_))) = work_queue.pop() {
-        // assert!(!size_under_rewrite.contains_key(&eclass));
+    while let Some(Reverse(eclass)) = work_queue.pop() {
+        // we assume that small numbers are children of large numbers, so when we pop we have already computed children
+        if(size_under_rewrite.contains_key(&eclass)) {
+            continue;
+        }
         let size_current = get_size(eclass, &size_under_rewrite);
         let mut best = size_current;
         // trying a rewrite; (fn_i arg0 ...)
@@ -188,7 +192,7 @@ fn rewrite(
         }
         if best < size_current {
             for parent in egraph[eclass].parents() {
-                work_queue.push(parent, Reverse(parent));
+                work_queue.push(Reverse(parent));
             }
             size_under_rewrite.insert(eclass, best);
         }
