@@ -12,16 +12,16 @@ pub struct StitchLang {
 }
 
 impl StitchLang {
-    /// Create an enode with the given string and children
-    pub fn new(op: impl Into<Symbol>, children: Vec<Id>) -> Self {
-        let op = op.into();
-        Self { op, children }
-    }
+    // Create an enode with the given string and children
+    // pub fn new(op: impl Into<Symbol>, children: Vec<Id>) -> Self {
+    //     let op = op.into();
+    //     Self { op, children }
+    // }
 
-    /// Create childless enode with the given string
-    pub fn leaf(op: impl Into<Symbol>) -> Self {
-        Self::new(op, vec![])
-    }
+    // /// Create childless enode with the given string
+    // pub fn leaf(op: impl Into<Symbol>) -> Self {
+    //     Self::new(op, vec![])
+    // }
 }
 
 impl Language for StitchLang {

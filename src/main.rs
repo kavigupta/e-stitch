@@ -12,8 +12,8 @@ use search::{SharedSearchData, SearchState};
 use smc::compute_cost;
 
 fn main() {
-    let rules = "../babble/harness/data/benchmark-dsrs/drawings.nuts-bolts.rewrites";
-    let (egraph, root) = util::load_egraph("../babble/harness/data/cogsci/nuts-bolts.json", Some(rules));
+    let rules = "../babble/harness/data/benchmark-dsrs/drawings.dials.rewrites";
+    let (egraph, root) = util::load_egraph("../babble/harness/data/cogsci/dials.json", Some(rules));
 
     smc::smc(egraph, root);
 
