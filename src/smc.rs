@@ -37,8 +37,8 @@ pub type StitchEgraph = egg::EGraph<StitchLang, StitchAnalysis>;
 pub fn smc(egraph: StitchEgraph, root: egg::Id) -> Option<(usize, SearchState)> {
     let shared = SharedSearchData { egraph };
 
-    let original_size = rewrite(&shared.egraph, root, &SearchState::new(&shared));
-    println!("original size: {}", original_size);
+    let original_size = compute_size(&shared.egraph, root, &SearchState::new(&shared));
+    println!("original size of egraph: {}", original_size);
 
     let num_particles = 10_000;
     let num_steps = 1000;
@@ -103,7 +103,7 @@ pub fn smc(egraph: StitchEgraph, root: egg::Id) -> Option<(usize, SearchState)> 
         }).collect();
     }
 
-    let (cost) = rewrite(&shared.egraph, root, &best_so_far.as_ref().unwrap().1);
+    let (cost) = compute_size(&shared.egraph, root, &best_so_far.as_ref().unwrap().1);
     println!("best: {}", cost);
     println!("Compression ratio: {}", original_size as f64 / cost as f64);
     // crate::util::print_programs(&term);
@@ -141,21 +141,11 @@ pub fn compute_cost(
     root: egg::Id,
     search_state: &SearchState,
 ) -> usize {
-    let cost = rewrite(egraph, root, search_state);
+    let cost = compute_size(egraph, root, search_state);
     return cost;
 }
 
-pub fn rewrite_utility(
-    egraph: &StitchEgraph,
-    root: egg::Id,
-    search_state: &SearchState,
-) -> f64 {
-    let cost = rewrite(egraph, root, search_state);
-    // utility is negative cost
-    return -(cost as f64);
-}
-
-fn rewrite(
+fn compute_size(
     egraph: &StitchEgraph,
     root: egg::Id,
     search_state: &SearchState,
