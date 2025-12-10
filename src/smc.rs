@@ -37,18 +37,23 @@ pub type StitchEgraph = egg::EGraph<StitchLang, StitchAnalysis>;
 pub fn smc(egraph: StitchEgraph, root: egg::Id) -> Option<(usize, SearchState)> {
     let shared = SharedSearchData { egraph };
 
-    let num_particles = 100;
+    let original_size = rewrite(&shared.egraph, root, &SearchState::new(&shared));
+    println!("original size: {}", original_size);
+
+    let num_particles = 10_000;
     let num_steps = 1000;
-    let temperature = 1.0;
+    let temperature = 100.0;
+    let dead_runs = 50;
 
     let mut best_so_far: Option<(usize, SearchState)> = None;
+    let mut best_found_at = None;
 
     // make a bunch of search states
     let mut search_states: Vec<SearchState> = (0..num_particles)
         .map(|i| SearchState::new(&shared))
         .collect();
 
-    for i in 0..num_steps {
+    for step in 0..num_steps {
         for search_state in &mut search_states {
             search_state.expand_random(&shared);
         }
@@ -60,8 +65,9 @@ pub fn smc(egraph: StitchEgraph, root: egg::Id) -> Option<(usize, SearchState)> 
 
         for (i, cost) in costs.iter().enumerate() {
             if best_so_far.as_ref().is_none_or(|best| *cost < best.0) {
-                println!("new best: {} {}", cost, search_states[i].pattern);
+                println!("[iteration {}] new best: {} {}", step, cost, search_states[i].pattern);
                 best_so_far = Some((*cost, search_states[i].clone()));
+                best_found_at = Some(step);
             }
         }
 
@@ -84,6 +90,11 @@ pub fn smc(egraph: StitchEgraph, root: egg::Id) -> Option<(usize, SearchState)> 
             break;
         }
 
+        if best_found_at.is_some_and(|best_found_at| (step as i64) - (best_found_at as i64) > dead_runs) {
+            println!("no progress in 100 steps, stopping at {}", step);
+            break;
+        }
+
         // resample
         normalize_and_accumulate(&mut weights);
         search_states = (0..num_particles).map(|i| {
@@ -94,9 +105,10 @@ pub fn smc(egraph: StitchEgraph, root: egg::Id) -> Option<(usize, SearchState)> 
 
     let (cost) = rewrite(&shared.egraph, root, &best_so_far.as_ref().unwrap().1);
     println!("best: {}", cost);
+    println!("Compression ratio: {}", original_size as f64 / cost as f64);
     // crate::util::print_programs(&term);
 
-    return best_so_far;
+    best_so_far
 }
 
 pub fn weighted_choice(acc_weights: &[f64]) -> usize {

@@ -4,6 +4,7 @@ mod pattern;
 mod search;
 mod revexpr;
 mod smc;
+mod rewrites;
 
 use lang::StitchLang;
 use pattern::Pattern;
@@ -11,7 +12,8 @@ use search::{SharedSearchData, SearchState};
 use smc::compute_cost;
 
 fn main() {
-    let (egraph, root) = util::load_egraph("data/domains/cogsci/nuts-bolts.json");
+    let rules = "../babble/harness/data/benchmark-dsrs/drawings.nuts-bolts.rewrites";
+    let (egraph, root) = util::load_egraph("../babble/harness/data/cogsci/nuts-bolts.json", Some(rules));
 
     smc::smc(egraph, root);
 

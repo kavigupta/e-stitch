@@ -1,10 +1,10 @@
-use crate::{lang::StitchLang, smc::{StitchAnalysis, StitchEgraph}};
-use egg::FromOp;
+use crate::{lang::StitchLang, rewrites::from_file, smc::{StitchAnalysis, StitchEgraph}};
+use egg::{FromOp, Rewrite};
 
 /// Loads a JSON file containing s-expressions and builds an egraph from them.
 /// All programs are combined into a single term (programs A B C ...).
 /// Returns the egraph and the root e-class Id of the programs node.
-pub fn load_egraph(filename: &str) -> (StitchEgraph, egg::Id) {
+pub fn load_egraph(filename: &str, rule_file: Option<&str>) -> (StitchEgraph, egg::Id) {
     let contents = std::fs::read_to_string(filename).expect("Failed to read file");
     let exprs: Vec<String> = serde_json::from_str(&contents).expect("Failed to parse JSON");
 
@@ -15,15 +15,18 @@ pub fn load_egraph(filename: &str) -> (StitchEgraph, egg::Id) {
     for expr_str in &exprs {
         let expr: egg::RecExpr<StitchLang> = expr_str.parse().expect("Failed to parse expression");
         expr_ids.push(egraph.add_expr(&expr));
+        println!("Loaded {} programs", expr_ids.len());
+        println!("Egraph size: {}", egraph.classes().len());
     }
+
 
     let programs_node = StitchLang::from_op("programs", expr_ids).expect("Failed to create programs node");
     let root = egraph.add(programs_node);
-    let rules: Vec<egg::Rewrite<StitchLang, StitchAnalysis>>    = vec![
-        egg::rewrite!("commute_add"; "(+ ?a ?b)" => "(+ ?b ?a)"),
-        egg::rewrite!("assoc_add"; "(+ ?a (+ ?b ?c))" => "(+ (+ ?a ?b) ?c)"),
-        egg::rewrite!("identity_add"; "(+ ?a 0)" => "?a"),
-    ];
+    let rules: Vec<egg::Rewrite<StitchLang, StitchAnalysis>> = match rule_file {
+        Some(rule_file) => from_file(rule_file).expect("Failed to parse rules file"),
+        None => vec![],
+    };
+        //  from_file(rule_file).expect("Failed to parse rules file");
     egraph.rebuild(); // might be unnecessary
     let mut runner: egg::Runner<StitchLang, StitchAnalysis> = egg::Runner::default();
     runner = runner.with_egraph(egraph)
@@ -33,6 +36,54 @@ pub fn load_egraph(filename: &str) -> (StitchEgraph, egg::Id) {
     runner.egraph.rebuild(); // might be unnecessary
     (runner.egraph, root)
 }
+
+// fn read_rules(rule_file: &str) -> Vec<egg::Rewrite<StitchLang, StitchAnalysis>> {
+//     // let rules = std::fs::read_to_string(rule_file).expect("Failed to read rules file");
+//     // let mut rules_vec = Vec::new();
+//     // for line in rules.lines() {
+//     //     let rule: egg::Rewrite<StitchLang, StitchAnalysis> = line.parse().expect("Failed to parse rule");
+//     //     rules_vec.push(rule);
+//     // }
+//     // rules_vec
+//     // vec![
+//     //     egg::rewrite!("commute_add"; "(+ ?a ?b)" => "(+ ?b ?a)"),
+//     //     egg::rewrite!("assoc_add"; "(+ ?a (+ ?b ?c))" => "(+ (+ ?a ?b) ?c)"),
+//     //     egg::rewrite!("identity_add"; "(+ ?a 0)" => "?a"),
+//     // ];
+//     // rules file looks like this:
+//     // 
+//     // // reroll new
+//     // r3roll_2_x: (C (C ?a (T (T ?s (M 1 0 (- 0 ?x) ?y1)) (M 1 0 0 ?y2))) (T (T ?s (M 1 0 ?x ?y1)) (M 1 0 0 ?y2))) => (repeat (T ?s (M 1 0 (- 0 ?x) ?y1)) 2 (M 1 0 (* 2 ?x) ?y2))
+//     // r3roll_3_x: (C (C (C ?a (T (T ?s (M 1 0 (- 0 ?x) ?y1)) (M 1 0 0 ?y2))) (T (T ?s (M 1 0 ?x ?y1)) (M 1 0 0 ?y2))) (T (T ?s (M 1 0 ?x ?y1)) (M 1 0 0 ?y2))) => (repeat (T ?s (M 1 0 (- 0 ?x) ?y1)) 3 (M 1 0 ?x ?y2))
+
+//     let mut rules_vec: Vec<egg::Rewrite<StitchLang, StitchAnalysis>> = Vec::new();
+//     let rules = std::fs::read_to_string(rule_file).expect("Failed to read rules file");
+//     for line in rules.lines() {
+//         if line.starts_with("//") || line.is_empty() {
+//             continue;
+//         }
+//         let rule: egg::Rewrite<StitchLang, StitchAnalysis> = parse_rule(line).expect("Failed to parse rule");
+//         rules_vec.push(rule);
+//     }
+//     rules_vec
+// }
+
+// fn parse_rule(rule_str: &str) -> Result<egg::Rewrite<StitchLang, StitchAnalysis>, String> {
+//     let parts: Vec<&str> = rule_str.split(": ").collect();
+//     if parts.len() != 2 {
+//         return Err(format!("Invalid rule format: {}", rule_str));
+//     }
+//     let rule_name = parts[0].to_string();
+//     let rule_body = parts[1];
+//     let parts: Vec<&str> = rule_body.split(" => ").collect();
+//     if parts.len() != 2 {
+//         return Err(format!("Invalid rule format: {}", rule_str));
+//     }
+//     let lhs = parts[0].to_string();
+//     let rhs = parts[1].to_string();
+//     // return Ok(egg:Rewrite::new(rule_name, lhs, rhs));
+//     return Ok(egg::rewrite!(rule_name; lhs => rhs));
+// }
 
 /// Prints a programs term with each child on a new line.
 /// If the term is not a programs node, prints it normally.
