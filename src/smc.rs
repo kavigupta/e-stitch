@@ -97,6 +97,12 @@ pub fn smc(egraph: StitchEgraph, root: egg::Id) -> Option<(usize, SearchState)> 
 
         // resample
         normalize_and_accumulate(&mut weights);
+
+        println!("Step {}: expanded all particles", step);
+        for i in 0..min(5, search_states.len()) {
+            println!("Sample particle {}: {}; cost={} weight={}", i, search_states[i].pattern, costs[i], weights[i]);
+        }
+
         search_states = (0..num_particles).map(|i| {
             let idx = weighted_choice(&weights);
             search_states[idx].clone()
