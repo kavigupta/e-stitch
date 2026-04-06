@@ -3,8 +3,8 @@ use std::collections::BinaryHeap;
 
 use crate::lang::StitchLang;
 use crate::pattern::Pattern;
-use crate::search::{SearchState, SharedSearchData, Subst};
-use egg::{Analysis, Id};
+use crate::search::{self, SearchState, SharedSearchData, Subst};
+use egg::{Analysis, Id, Language};
 use priority_queue::PriorityQueue;
 use rand::Rng;
 use rustc_hash::{FxHashMap};
@@ -103,7 +103,7 @@ pub fn smc(egraph: StitchEgraph, root: egg::Id) -> Option<(usize, SearchState)> 
         }).collect();
     }
 
-    let (cost) = compute_size(&shared.egraph, root, &best_so_far.as_ref().unwrap().1);
+    let (cost) = compute_cost(&shared.egraph, root, &best_so_far.as_ref().unwrap().1);
     println!("best: {}", cost);
     println!("Compression ratio: {}", original_size as f64 / cost as f64);
     // crate::util::print_programs(&term);
@@ -142,7 +142,12 @@ pub fn compute_cost(
     search_state: &SearchState,
 ) -> usize {
     let cost = compute_size(egraph, root, search_state);
-    return cost;
+    let pattern_size = compute_pattern_size(&search_state.pattern);
+    cost + pattern_size
+}
+
+pub fn compute_pattern_size(pattern: &Pattern) -> usize {
+    1 + pattern.pattern.nodes.iter().map(|node| node.children().len()).sum::<usize>()
 }
 
 fn compute_size(
