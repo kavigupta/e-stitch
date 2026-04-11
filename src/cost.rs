@@ -71,16 +71,16 @@ pub fn compute_size(egraph: &StitchEgraph, root: egg::Id, search_state: &SearchS
     }
     let final_size = size_under_rewrite.get(&root).cloned().unwrap_or(egraph[root].data as i64);
     if check_slow {
-        let slow_size = rewrite_slow(egraph, root, search_state) as i64;
+        let slow_size = build_rewritten_egraph(egraph, search_state)[root].data as i64;
         assert_eq!(final_size, slow_size, "Fast rewrite size {} != slow rewrite size {}", final_size, slow_size);
     }
     final_size as usize
 }
 
-/// Slow reference implementation of `compute_size`: clones the egraph, unions each
-/// match root with an `inv_0(args...)` node, rebuilds, and reads the resulting size
-/// out of the analysis data.
-fn rewrite_slow(egraph: &StitchEgraph, root: egg::Id, search_state: &SearchState) -> usize {
+/// Clones the egraph and unions each match root with an `inv_0(args...)` node, then
+/// rebuilds. Used both as a slow reference for `compute_size` and as a starting point
+/// for extracting rewritten programs.
+fn build_rewritten_egraph(egraph: &StitchEgraph, search_state: &SearchState) -> StitchEgraph {
     let mut egraph = egraph.clone();
     for m in &search_state.matches {
         for subst in &m.substs {
@@ -90,5 +90,12 @@ fn rewrite_slow(egraph: &StitchEgraph, root: egg::Id, search_state: &SearchState
         }
     }
     egraph.rebuild();
-    egraph[root].data as usize
+    egraph
+}
+
+/// Extracts each program from the rewritten egraph, using `inv_0` where it reduces size.
+pub fn extract_rewritten_programs(egraph: &StitchEgraph, root: egg::Id, search_state: &SearchState) -> Vec<String> {
+    let rewritten = build_rewritten_egraph(egraph, search_state);
+    let extractor = egg::Extractor::new(&rewritten, egg::AstSize);
+    rewritten[root].nodes[0].children.iter().map(|&child| extractor.find_best(child).1.to_string()).collect()
 }
