@@ -1,5 +1,6 @@
 pub mod cost;
 pub mod debug_log;
+pub mod follow;
 pub mod io;
 pub mod lang;
 pub mod logging;
@@ -24,6 +25,10 @@ pub struct Args {
     /// Path to rewrite rules file.
     #[arg(short, long)]
     pub rules: Option<String>,
+
+    /// Follow pattern to constrain particle expansion.
+    #[arg(short, long)]
+    pub follow: Option<String>,
 
     /// Number of particles.
     #[arg(long, default_value_t = 10_000)]
