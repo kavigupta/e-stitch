@@ -102,7 +102,7 @@ pub(crate) fn compute_size(egraph: &StitchEgraph, root: egg::Id, cache: &CostCac
                 }
             }
         }
-        if let Some(enode) = egraph[eclass].nodes.first() {
+        for enode in &egraph[eclass].nodes {
             let size_no_rewrite: i64 = 1 + enode.children.iter().map(|&c| get_size(c, &size_under_rewrite)).sum::<i64>();
             if size_no_rewrite < best {
                 best = size_no_rewrite;
