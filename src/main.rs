@@ -2,6 +2,7 @@ mod cost;
 mod debug_log;
 mod io;
 mod lang;
+mod logging;
 mod matching;
 mod math;
 mod pattern;
@@ -63,6 +64,10 @@ pub struct Args {
     /// Enable detailed debug logging of all particles at each SMC step.
     #[arg(long, default_value_t = false)]
     pub debug_log: bool,
+
+    /// Print per-step progress output (top particles, follow stats, etc.).
+    #[arg(long, default_value_t = false)]
+    pub verbose: bool,
 }
 
 fn main() {
