@@ -1,3 +1,4 @@
+pub mod best_first;
 pub mod cost;
 pub mod debug_log;
 pub mod follow;
@@ -13,6 +14,8 @@ pub mod search;
 pub mod smc;
 
 use clap::{Parser, ValueEnum};
+
+pub use best_first::SearchPriority;
 
 /// Which search algorithm to run.
 #[derive(ValueEnum, Clone, Debug)]
@@ -62,6 +65,10 @@ pub struct Args {
     /// Maximum arity of patterns to consider as "best".
     #[arg(long, default_value_t = 1000)]
     pub max_arity: usize,
+
+    /// Heap priority for best-first search (only used when --search=best-first).
+    #[arg(long, value_enum, default_value_t = SearchPriority::Cost)]
+    pub priority: SearchPriority,
 
     /// Weight match selection by usage count during expansion.
     #[arg(long, default_value_t = false)]
