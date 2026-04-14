@@ -58,6 +58,13 @@ function fmt(x, digits) {
   return x == null || Number.isNaN(x) ? null : x.toFixed(digits);
 }
 
+/** Geometric mean of an array, ignoring null/NaN/non-positive values. */
+function geoMean(vals) {
+  const pos = vals.filter(v => v != null && !Number.isNaN(v) && v > 0);
+  if (pos.length === 0) return null;
+  return Math.exp(pos.reduce((s, v) => s + Math.log(v), 0) / pos.length);
+}
+
 /** Build a single-run table. */
 function renderSolo(ts, data) {
   const domains = data.domains;
@@ -83,34 +90,48 @@ function renderSolo(ts, data) {
     return best;
   };
 
+  const gmCr = METHODS.map(m => geoMean(rows.map(r => r.cr(m))));
+  const gmT  = METHODS.map(m => geoMean(rows.map(r => r.tm(m))));
+
   const body = rows.map(r => {
     const crVals = METHODS.map(m => r.cr(m));
     const tVals = METHODS.map(m => r.tm(m));
-    const fcVals = METHODS.map(m => r.fc(m));
     const bestCr = bestIdx(crVals, "max");
     const bestT = bestIdx(tVals, "min");
-    const bestFc = bestIdx(fcVals, "min");
     const metric = (vals, digits, bestI) => (i) => {
       const cls = [i === 0 ? "group-left" : "", i === bestI ? "best" : ""].filter(Boolean).join(" ");
       return `<td class="${cls}">${cell(fmt(vals[i], digits))}</td>`;
     };
     const crCell = metric(crVals, 2, bestCr);
     const tCell = metric(tVals, 1, bestT);
-    const fcCell = (i) => {
-      const cls = [i === 0 ? "group-left" : "", i === bestFc ? "best" : ""].filter(Boolean).join(" ");
-      return `<td class="${cls}">${cell(fcVals[i])}</td>`;
-    };
     return `
       <tr>
         <td class="domain">${DOMAIN_LABELS[r.d] ?? r.d}</td>
         <td>${cell(r.init)}</td>
         ${SHOW_EGRAPH_MIN ? `<td>${cell(r.egMin)}</td>` : ""}
         ${METHODS.map((_, i) => crCell(i)).join("")}
-        ${METHODS.map((_, i) => fcCell(i)).join("")}
         ${METHODS.map((_, i) => tCell(i)).join("")}
       </tr>
     `;
   }).join("");
+
+  const bestGmCr = bestIdx(gmCr, "max");
+  const bestGmT  = bestIdx(gmT, "min");
+  const gmRow = `
+    <tr class="geo-mean">
+      <td class="domain">Geo. mean</td>
+      <td></td>
+      ${SHOW_EGRAPH_MIN ? "<td></td>" : ""}
+      ${gmCr.map((v, i) => {
+        const cls = [i === 0 ? "group-left" : "", i === bestGmCr ? "best" : ""].filter(Boolean).join(" ");
+        return `<td class="${cls}">${cell(fmt(v, 2))}</td>`;
+      }).join("")}
+      ${gmT.map((v, i) => {
+        const cls = [i === 0 ? "group-left" : "", i === bestGmT ? "best" : ""].filter(Boolean).join(" ");
+        return `<td class="${cls}">${cell(fmt(v, 1))}</td>`;
+      }).join("")}
+    </tr>
+  `;
 
   const libs = renderLibraries(rows);
 
@@ -124,7 +145,6 @@ function renderSolo(ts, data) {
           <th class="spacer"></th>
           ${SHOW_EGRAPH_MIN ? '<th class="spacer"></th>' : ""}
           <th colspan="4">Compression Ratio</th>
-          <th colspan="4">Final cost</th>
           <th colspan="4">Time (s)</th>
         </tr>
         <tr>
@@ -133,10 +153,9 @@ function renderSolo(ts, data) {
           ${SHOW_EGRAPH_MIN ? "<th>E-graph min</th>" : ""}
           ${METHODS.map((m, i) => `<th class="${i === 0 ? 'group-left' : ''}">${METHOD_LABELS[m]}</th>`).join("")}
           ${METHODS.map((m, i) => `<th class="${i === 0 ? 'group-left' : ''}">${METHOD_LABELS[m]}</th>`).join("")}
-          ${METHODS.map((m, i) => `<th class="${i === 0 ? 'group-left' : ''}">${METHOD_LABELS[m]}</th>`).join("")}
         </tr>
       </thead>
-      <tbody>${body}</tbody>
+      <tbody>${body}${gmRow}</tbody>
     </table>
     ${libs}
   `;
@@ -224,8 +243,6 @@ function renderCompare(tsA, tsB, dataA, dataB) {
       egB: b.egraph_min_size ?? null,
       crA: m => (byA[m] ? byA[m].compression_ratio : null),
       crB: m => (byB[m] ? byB[m].compression_ratio : null),
-      fcA: m => (byA[m] ? byA[m].final_cost : null),
-      fcB: m => (byB[m] ? byB[m].final_cost : null),
       tA: m => (byA[m] ? byA[m].elapsed_secs : null),
       tB: m => (byB[m] ? byB[m].elapsed_secs : null),
     };
@@ -243,10 +260,23 @@ function renderCompare(tsA, tsB, dataA, dataB) {
       <td>${intCell(r.initA, r.initB)}</td>
       ${SHOW_EGRAPH_MIN ? `<td>${intCell(r.egA, r.egB)}</td>` : ""}
       ${METHODS.map((m, i) => `<td class="${i === 0 ? 'group-left' : ''}">${pairCell(r.crA(m), r.crB(m), 2, true)}</td>`).join("")}
-      ${METHODS.map((m, i) => `<td class="${i === 0 ? 'group-left' : ''}">${pairCell(r.fcA(m), r.fcB(m), 0, false)}</td>`).join("")}
       ${METHODS.map((m, i) => `<td class="${i === 0 ? 'group-left' : ''}">${pairCell(r.tA(m), r.tB(m), 1, false)}</td>`).join("")}
     </tr>
   `).join("");
+
+  const gmCrA = METHODS.map(m => geoMean(rows.map(r => r.crA(m))));
+  const gmCrB = METHODS.map(m => geoMean(rows.map(r => r.crB(m))));
+  const gmTA  = METHODS.map(m => geoMean(rows.map(r => r.tA(m))));
+  const gmTB  = METHODS.map(m => geoMean(rows.map(r => r.tB(m))));
+  const gmRow = `
+    <tr class="geo-mean">
+      <td class="domain">Geo. mean</td>
+      <td></td>
+      ${SHOW_EGRAPH_MIN ? "<td></td>" : ""}
+      ${METHODS.map((m, i) => `<td class="${i === 0 ? 'group-left' : ''}">${pairCell(gmCrA[i], gmCrB[i], 2, true)}</td>`).join("")}
+      ${METHODS.map((m, i) => `<td class="${i === 0 ? 'group-left' : ''}">${pairCell(gmTA[i], gmTB[i], 1, false)}</td>`).join("")}
+    </tr>
+  `;
 
   return `
     <h1>${TITLE} · compare</h1>
@@ -263,7 +293,6 @@ function renderCompare(tsA, tsB, dataA, dataB) {
           <th class="spacer"></th>
           ${SHOW_EGRAPH_MIN ? '<th class="spacer"></th>' : ""}
           <th colspan="4">Compression Ratio (higher is better)</th>
-          <th colspan="4">Final cost (lower is better)</th>
           <th colspan="4">Time (s) (lower is better)</th>
         </tr>
         <tr>
@@ -272,10 +301,9 @@ function renderCompare(tsA, tsB, dataA, dataB) {
           ${SHOW_EGRAPH_MIN ? "<th>E-graph min</th>" : ""}
           ${METHODS.map((m, i) => `<th class="${i === 0 ? 'group-left' : ''}">${METHOD_LABELS[m]}</th>`).join("")}
           ${METHODS.map((m, i) => `<th class="${i === 0 ? 'group-left' : ''}">${METHOD_LABELS[m]}</th>`).join("")}
-          ${METHODS.map((m, i) => `<th class="${i === 0 ? 'group-left' : ''}">${METHOD_LABELS[m]}</th>`).join("")}
         </tr>
       </thead>
-      <tbody>${body}</tbody>
+      <tbody>${body}${gmRow}</tbody>
     </table>
   `;
 }

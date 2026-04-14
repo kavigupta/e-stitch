@@ -31,6 +31,8 @@ table.t1 thead tr:last-child th { font-size: .7rem; letter-spacing: .05em; text-
 table.t1 .group-left { border-left: 1px solid var(--border); }
 table.t1 td.best { font-weight: 700; color: var(--fg); }
 table.t1 tbody tr:hover td { background: #fafbfc; }
+table.t1 tr.geo-mean td { border-top: 2px solid var(--border); font-style: italic; color: var(--muted); }
+table.t1 tr.geo-mean td.best { font-weight: 700; color: var(--fg); }
 .delta { display: inline-block; font-size: .72rem; margin-left: .35rem; padding: .05rem .35rem; border-radius: 4px; font-variant-numeric: tabular-nums; }
 .delta.good { background: #ecfdf5; color: var(--good); }
 .delta.bad { background: #fef2f2; color: #dc2626; }
