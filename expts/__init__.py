@@ -6,32 +6,33 @@ session-wide folder helpers (``current_folder``, ``new_folder``,
 ``set_folder``). They're re-exported here for convenience.
 """
 
-import os
-import argparse
 import subprocess
+from pathlib import Path
 
-from .folders import (
-    RESULTS_DIR,
-    current_folder,
-    current_folder_path,
-    new_folder,
-    set_folder,
-    unique_path,
-)
+from .folders import *
 
-__all__ = [
-    "RESULTS_DIR",
-    "current_folder",
-    "current_folder_path",
-    "new_folder",
-    "set_folder",
-    "compress",
-    "run_domain",
-    "runall",
-    "DOMAINS_WITH_REWRITES",
-    "ALL_DOMAINS",
-    "NON_BABBLE_DOMAINS",
-]
+
+# Project roots for the three compressors we call out to.
+EGG_STITCH_DIR = Path(__file__).parent.parent.resolve()
+BABBLE_DIR = (EGG_STITCH_DIR.parent / "babble").resolve()
+STITCH_DIR = (EGG_STITCH_DIR.parent / "stitch").resolve()
+
+
+def _cargo_build(project_dir: Path, bin_name: str) -> Path:
+    """Run ``cargo build --release --bin=<bin_name>`` and return the binary path."""
+    print(f"+ cargo build --release --bin={bin_name}  (in {project_dir})", flush=True)
+    subprocess.run(
+        ["cargo", "build", "--release", "--bin", bin_name],
+        check=True, cwd=project_dir,
+    )
+    return project_dir / "target" / "release" / bin_name
+
+
+# Build all three binaries once at import time and expose their paths as
+# top-level constants. Cargo's incremental build makes the no-op case cheap.
+EGG_STITCH_BIN: Path = _cargo_build(EGG_STITCH_DIR, "egg-stitch")
+BABBLE_BIN: Path = _cargo_build(BABBLE_DIR, "drawings")
+STITCH_BIN: Path = _cargo_build(STITCH_DIR, "compress")
 
 # Domains that have a matching drawings.<name>.rewrites file in ../babble.
 DOMAINS_WITH_REWRITES = ["dials", "furniture", "nuts-bolts", "wheels"]
@@ -39,70 +40,18 @@ DOMAINS_WITH_REWRITES = ["dials", "furniture", "nuts-bolts", "wheels"]
 ALL_DOMAINS = ["dials", "furniture", "nuts-bolts", "wheels"]
 
 
-# babble doesnt try to do these domains
-NON_BABBLE_DOMAINS = ["bridge", "castle", "city", "house"]
+def rewrites_path(domain: str) -> str:
+    """Path to the babble rewrite rules for ``domain``."""
+    return f"../babble/harness/data/benchmark-dsrs/drawings.{domain}.rewrites"
 
 
-def compress(input, output="out.json", rewrites=None, flamegraph=False, samply=False, **kwargs):
-    """Run `cargo run --release` with the given input/output (relative to results dir)/optional rewrites.
-
-    Pass ``flamegraph=True`` to profile via ``cargo flamegraph`` (macOS, needs sudo).
-    Pass ``samply=True`` to profile via ``samply record`` (builds release binary first,
-    then opens Firefox Profiler automatically).
-    """
-    output_path = unique_path(current_folder_path() / output)
-    binary = "./target/release/egg-stitch"
-    prog_args = ["-i", input, "--output", str(output_path)]
-    if flamegraph:
-        svg_path = str(output_path).replace(".json", "_flamegraph.svg")
-        cmd = ["cargo", "flamegraph", "--root", "-o", svg_path, "--", *prog_args]
-    elif samply:
-        subprocess.run(["cargo", "build", "--release"], check=True)
-        cmd = ["samply", "record", binary, *prog_args]
-    else:
-        cmd = ["cargo", "run", "--release", "--", *prog_args]
-    if rewrites is not None:
-        cmd += ["-r", rewrites]
-    for k, v in kwargs.items():
-        k = k.replace("_", "-")
-        if isinstance(v, bool):
-            if v:
-                cmd.append(f"--{k}")
-            continue
-        cmd += [f"--{k}", str(v)]
-    print("+", " ".join(cmd), flush=True)
-    subprocess.run(cmd, check=True, env=dict(os.environ, RUST_BACKTRACE="1"))
-    return output_path
+# Pulled in at the bottom so submodules can import the constants/helpers
+# defined above. `from expts import *` then re-exports everything.
+from .egg_stitch import *
+from .babble import *
+from .stitch import *
+from .table1 import *
+from .table2 import *
 
 
-def run_domain(domain, rewrites=True, **kwargs):
-    """Run a cogsci domain benchmark, optionally with its rewrite set."""
-    return compress(
-        input=f"data/domains/cogsci/{domain}.json",
-        rewrites=f"../babble/harness/data/benchmark-dsrs/drawings.{domain}.rewrites" if rewrites else None,
-        output=f"{domain}.json" if rewrites else f"{domain}_no_rewrites.json",
-        **kwargs,
-    )
 
-
-def runall(**kwargs):
-    """Run all experiments."""
-    for d in ALL_DOMAINS:
-        run_domain(d, rewrites=False, **kwargs)
-    for d in DOMAINS_WITH_REWRITES:
-        run_domain(d, rewrites=True, **kwargs)
-
-
-def main():
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("domain", nargs="?", default="all", help="domain name, or 'all'")
-    parser.add_argument("--rewrites", action="store_true", help="use the domain's rewrite set")
-    args = parser.parse_args()
-    if args.domain == "all":
-        runall()
-    else:
-        run_domain(args.domain, rewrites=args.rewrites)
-
-
-if __name__ == "__main__":
-    main()

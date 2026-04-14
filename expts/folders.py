@@ -2,7 +2,7 @@
 
 Each Python session lazily creates a fresh timestamp-named folder under
 ``viz/results/`` the first time it is asked for one, and subsequent calls
-(including those from ``compress``/``runall``) reuse it. Use
+(including those from ``egg_stitch``/``runall``) reuse it. Use
 ``new_folder()`` to start a fresh one, or ``set_folder(name)`` to point at
 an existing one.
 """

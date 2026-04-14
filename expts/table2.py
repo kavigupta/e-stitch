@@ -1,0 +1,120 @@
+"""Table 2 experiment: Ours (Enum + SMC) vs babble vs Stitch, no DSRs.
+
+Same four cogsci domains as Table 1 but every method runs *without* any
+domain-specific rewrites, and Stitch is actually included (Table 1 runs
+with DSRs, which Stitch doesn't accept). Results land under
+``viz/results/table2/<timestamp>/``.
+"""
+
+import json
+import time
+from pathlib import Path
+
+from . import *
+from .babble import *
+from .egg_stitch import *
+from .stitch import *
+from .table1 import TABLE1_DOMAINS, DOMAIN_LABELS
+
+# Reuse the Table 1 domain list/labels so the HTML viewer sees the same order.
+TABLE2_DOMAINS = TABLE1_DOMAINS
+
+
+def table2(
+    *,
+    smc_num_steps: int = 100,
+    smc_num_particles: int = 1000,
+    smc_temperature: float = 1000.0,
+    enum_num_steps: int = 500,
+    output_name: str = "table2.json",
+) -> Path:
+    """Run Enum, SMC, babble, and Stitch on the four domains with no DSRs."""
+    assert all(d in ALL_DOMAINS for d in TABLE2_DOMAINS), "domain typo"
+    set_folder(f"table2/{time.strftime('%Y-%m-%d_%H-%M-%S')}")
+    results: dict = {
+        "config": {
+            "smc": {"num_steps": smc_num_steps, "num_particles": smc_num_particles, "temperature": smc_temperature},
+            "enum": {"num_steps": enum_num_steps},
+        },
+        "domains": {},
+    }
+
+    for domain in TABLE2_DOMAINS:
+        print(f"\n=== {domain} ===", flush=True)
+        enum_res, _ = run_ours(domain, "best-first", num_steps=enum_num_steps, rewrites=None)
+        smc_res, _ = run_ours(
+            domain, "smc",
+            num_steps=smc_num_steps,
+            num_particles=smc_num_particles,
+            temperature=smc_temperature,
+            rewrites=None,
+        )
+        babble_res = run_babble(domain)
+        stitch_res = run_stitch(domain)
+        results["domains"][domain] = {
+            "results": [enum_res.to_dict(), smc_res.to_dict(), babble_res.to_dict(), stitch_res.to_dict()],
+        }
+
+    out_path = current_folder_path() / output_name
+    with open(out_path, "w") as f:
+        json.dump(results, f, indent=2)
+    print(f"\nwrote {out_path}", flush=True)
+    print_table2(out_path)
+    return out_path
+
+
+def _fmt(x, spec: str, na: str = "N/A") -> str:
+    """Format ``x`` with ``spec`` or return ``na`` when ``x`` is None."""
+    return na if x is None else format(x, spec)
+
+
+def print_table2(path: str | Path) -> None:
+    """Pretty-print a saved Table 2 JSON."""
+    with open(path) as f:
+        saved = json.load(f)
+    domains = saved["domains"]
+
+    header_top = (
+        f"{'':<14}{'':>14}  "
+        f"{'Compression Ratio':^36}  {'Time (s)':^36}"
+    )
+    header_sub = (
+        f"{'':<14}{'original size':>14}  "
+        f"{'Enum':>10}{'SMC':>10}{'babble':>8}{'Stitch':>8}  "
+        f"{'Enum':>10}{'SMC':>10}{'babble':>8}{'Stitch':>8}"
+    )
+    print()
+    print("Table 2: Ours (SMC and Enum) vs Babble vs Stitch on benchmarks without DSRs")
+    print()
+    print(header_top)
+    print(header_sub)
+    print("-" * len(header_sub))
+    for domain in TABLE2_DOMAINS:
+        if domain not in domains:
+            continue
+        d = domains[domain]
+        by_method = {r["method"]: r for r in d["results"]}
+        label = DOMAIN_LABELS.get(domain, domain)
+        any_result = by_method.get("enum") or next(iter(by_method.values()))
+        original_size = any_result["initial_cost"]
+
+        def cr(m):
+            return by_method[m]["compression_ratio"] if m in by_method else None
+
+        def t(m):
+            return by_method[m]["elapsed_secs"] if m in by_method else None
+
+        row = (
+            f"{label:<14}"
+            f"{_fmt(original_size, 'd'):>14}  "
+            f"{_fmt(cr('enum'), '.2f'):>10}"
+            f"{_fmt(cr('smc'), '.2f'):>10}"
+            f"{_fmt(cr('babble'), '.2f'):>8}"
+            f"{_fmt(cr('stitch'), '.2f'):>8}  "
+            f"{_fmt(t('enum'), '.1f'):>10}"
+            f"{_fmt(t('smc'), '.1f'):>10}"
+            f"{_fmt(t('babble'), '.1f'):>8}"
+            f"{_fmt(t('stitch'), '.1f'):>8}"
+        )
+        print(row)
+    print()
