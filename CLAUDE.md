@@ -45,7 +45,7 @@ wasm-pack build --target web --features wasm
 
 # Run the dev server for the interactive UI
 make server
-# Then open http://localhost:8067/viz/interactive.html
+# Then open http://localhost:8066/viz/interactive.html
 ```
 
 ## Development Notes

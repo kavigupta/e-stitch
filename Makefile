@@ -1,4 +1,4 @@
-PORT ?= 8067
+PORT ?= 8066
 
 dev:
 	python3 run.py $(or $(RUN),dev)

@@ -10,7 +10,7 @@ Launch results visualization server (if not already running) with:
 make server
 ```
 
-View experiments at [http://localhost:8067/viz/](http://localhost:8067/viz/).
+View experiments at [http://localhost:8066/viz/](http://localhost:8066/viz/).
 
 
 run all experiments
