@@ -82,7 +82,7 @@ class Handler(SimpleHTTPRequestHandler):
 
 
 def main():
-    port = int(sys.argv[1]) if len(sys.argv) > 1 else 8066
+    port = int(sys.argv[1]) if len(sys.argv) > 1 else 8067
     print(f"serving on http://localhost:{port}/viz/", flush=True)
     ThreadingHTTPServer(("", port), Handler).serve_forever()
 

@@ -51,6 +51,7 @@ from .egg_stitch import *
 from .babble import *
 from .stitch import *
 from .table1 import *
+from .table2 import *
 
 
 

@@ -39,17 +39,25 @@ def egg_stitch(input, output="out.json", rewrites=None, flamegraph=False, samply
     return output_path
 
 
-def run_ours(domain: str, search: str, *, num_steps: int, **extra) -> tuple[Result, int]:
-    """Run our compressor on ``domain`` with rewrites.
+_UNSET = object()
+
+
+def run_ours(domain: str, search: str, *, num_steps: int, rewrites=_UNSET, **extra) -> tuple[Result, int | None]:
+    """Run our compressor on ``domain``.
+
+    ``rewrites`` defaults to the domain's standard rewrite file; pass
+    ``None`` to run without any DSRs.
 
     Returns ``(Result, egraph_min_size)`` where ``egraph_min_size`` is the
     corpus min cost after the rewrite rules are applied (our tool exposes
-    this as ``cost_after_rewrites``; it's not meaningful for babble/stitch
-    so it lives outside the common :class:`Result`).
+    this as ``cost_after_rewrites``). When no rewrites are applied the
+    second tuple element is ``None``.
     """
+    if rewrites is _UNSET:
+        rewrites = rewrites_path(domain)
     output = egg_stitch(
         f"data/domains/cogsci/{domain}.json",
-        rewrites=rewrites_path(domain),
+        rewrites=rewrites,
         output=f"{domain}_{search.replace('-', '_')}.json",
         search=search,
         num_steps=num_steps,
@@ -62,6 +70,7 @@ def run_ours(domain: str, search: str, *, num_steps: int, **extra) -> tuple[Resu
     final_cost = int(data.get("final_cost") or initial_cost)
     pattern = data.get("pattern")
     method = "enum" if search == "best-first" else search
+    cost_after = int(data["cost_after_rewrites"]) if rewrites is not None else None
     result = Result(
         method=method,
         domain=domain,
@@ -71,10 +80,10 @@ def run_ours(domain: str, search: str, *, num_steps: int, **extra) -> tuple[Resu
         elapsed_secs=float(data["elapsed_secs"]),
         library=[pattern] if pattern else [],
         extra={
-            "cost_after_rewrites": int(data["cost_after_rewrites"]),
+            "cost_after_rewrites": cost_after,
             "arity": data.get("arity"),
             "num_matches": data.get("num_matches"),
             "output_file": str(output),
         },
     )
-    return result, int(data["cost_after_rewrites"])
+    return result, cost_after
