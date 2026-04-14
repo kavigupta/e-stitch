@@ -1,23 +1,13 @@
 #!/usr/bin/env python3
-"""Run a named experiment from the README. Usage: python run.py <name>"""
+"""Run a named experiment from the README. Usage: ./run.py <name>"""
 
 import sys
 import json
-from expts import compress, run_domain, runall, ALL_DOMAINS
-import subprocess as sp
-
-
-
-
-def all_mini():
-    runall(num_steps=10, num_particles=100)
-
-def dials_debug():
-    run_domain("dials", num_steps=10, num_particles=1000, debug_log=True)
+from expts import *
 
 
 def dials_compress():
-    compress(
+    egg_stitch(
         "data/domains/cogsci/dials.json",
         rewrites="../babble/harness/data/benchmark-dsrs/drawings.dials.rewrites",
         num_steps=10,
@@ -27,7 +17,7 @@ def dials_compress():
 
 
 def dials_follow():
-    compress(
+    egg_stitch(
         "data/domains/cogsci/dials.json",
         rewrites="../babble/harness/data/benchmark-dsrs/drawings.dials.rewrites",
         num_steps=10,
@@ -51,7 +41,7 @@ def temp_sweep():
 
     for row in rows:
         print(f"Running {row['name']} ===")
-        row["output"] = compress(
+        row["output"] = egg_stitch(
             "data/domains/cogsci/dials.json",
             rewrites="../babble/harness/data/benchmark-dsrs/drawings.dials.rewrites",
             output=f"dials_{row['name']}.json",
@@ -70,7 +60,7 @@ def temp_sweep():
 
 def bf_dfs():
     """Best-first with depth-first priority."""
-    compress(
+    egg_stitch(
         "data/domains/cogsci/dials.json",
         rewrites="../babble/harness/data/benchmark-dsrs/drawings.dials.rewrites",
         output="dials_bf_dfs.json",
@@ -84,7 +74,7 @@ def bf_dfs():
 
 def bf_bfs():
     """Best-first with breadth-first priority."""
-    compress(
+    egg_stitch(
         "data/domains/cogsci/dials.json",
         rewrites="../babble/harness/data/benchmark-dsrs/drawings.dials.rewrites",
         output="dials_bf_bfs.json",
@@ -98,7 +88,7 @@ def bf_bfs():
 
 def bf_matches():
     """Best-first with most-matches priority."""
-    compress(
+    egg_stitch(
         "data/domains/cogsci/dials.json",
         rewrites="../babble/harness/data/benchmark-dsrs/drawings.dials.rewrites",
         output="dials_bf_matches.json",
@@ -111,7 +101,7 @@ def bf_matches():
 
 def best_first():
     """Best-first with cost priority."""
-    compress(
+    egg_stitch(
         "data/domains/cogsci/dials.json",
         rewrites="../babble/harness/data/benchmark-dsrs/drawings.dials.rewrites",
         output="dials_bf_cost.json",
@@ -132,7 +122,7 @@ def dev_best_first():
 
 def best_first_all():
     for domain in ALL_DOMAINS:
-        compress(
+        egg_stitch(
             f"data/domains/cogsci/{domain}.json",
             rewrites=None,
             output=f"{domain}_bf_cost.json",
@@ -143,67 +133,10 @@ def best_first_all():
         )
 
 
-def stitch():
-    stitch_dir = "../stitch"
-    relative_outfiles = []
-    for domain in ALL_DOMAINS:
-        name = f"{domain}"
-        outfile = f"out/for-egg-stitch/{name}.json"
-        relative_outfiles.append(f"{stitch_dir}/{outfile}")
-        print(f"\033[92mRunning {domain}\033[0m")
-        stitch_cmd = ["cargo", "run", "--release", "--bin=compress", f"data/cogsci/{domain}.json", "-i1", "-a2", "--out", outfile, "--no-curried-bodies", "--no-curried-metavars", "--silent"]
-        sp.run(stitch_cmd, check=True, cwd=stitch_dir)
-    
-    for relative_outfile in relative_outfiles:
-        with open(relative_outfile) as f:
-            data = json.load(f)
-        abstraction = data["abstractions"][0]
-        print(f"From {relative_outfile}:")
-        print("  ", abstraction["body"])
-        print("  ", abstraction["arity"])
-        print("  ", abstraction["compression_ratio"])
-
-def babble():
-    """Run babble on all domains, analogous to stitch()."""
-    babble_dir = "../babble"
-    results = []
-    for domain in ALL_DOMAINS:
-        outfile = f"harness/data_gen/cache/{domain}.csv"
-        print(f"\033[92mRunning {domain}\033[0m")
-        babble_cmd = [
-            "cargo", "run", "--release", "--bin=drawings", "--",
-            f"harness/data/cogsci/{domain}.bab",
-            "--beams=400", "--lps=1", "--rounds=1", "--max-arity=2",
-            f"--output={outfile}",
-        ]
-        proc = sp.run(babble_cmd, check=True, cwd=babble_dir, capture_output=True, text=True)
-        # Parse library definitions from stdout ("lib <name> =\n  <body>\nin")
-        libs = []
-        lines = proc.stdout.splitlines()
-        for i, l in enumerate(lines):
-            if l.startswith("lib "):
-                name = l.strip().removesuffix(" =")
-                body = lines[i + 1].strip() if i + 1 < len(lines) else "?"
-                libs.append(f"{name}: {body}")
-        # Parse CSV for stats
-        with open(f"{babble_dir}/{outfile}") as f:
-            row = f.read().strip().split(",")
-        # CSV fields: type,round,beams_start,beams_end,lps,?,rounds,initial_cost,final_cost,compression,num_libs,time
-        results.append((domain, row, libs))
-
-    for domain, row, libs in results:
-        initial_cost, final_cost, compression, time_s = row[7], row[8], row[9], row[11]
-        print(f"{domain}: {initial_cost} -> {final_cost} (compression {compression}, time {time_s}s)")
-        for lib in libs:
-            print(f"  {lib}")
-
-
-
-
-
 def dev():
-    best_first()
-    # compress(
+    table1()
+    # best_first()
+    # egg_stitch(
     #     "data/domains/cogsci/dials.json",
     #     rewrites="../babble/harness/data/benchmark-dsrs/drawings.dials.rewrites",
     #     output="dials_T1000.json",
@@ -212,7 +145,6 @@ def dev():
     #     temperature=1000,
     #     max_arity=2,
     # )
-
 
 
 
