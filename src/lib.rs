@@ -14,6 +14,7 @@ pub mod search;
 pub mod smc;
 
 use clap::{Parser, ValueEnum};
+use egg::Id;
 
 pub use best_first::SearchPriority;
 
@@ -82,6 +83,10 @@ pub struct Args {
     #[arg(long, default_value_t = false)]
     pub check_slow: bool,
 
+    /// Number of abstractions to find sequentially (each stacks on the previous).
+    #[arg(long, default_value_t = 1)]
+    pub num_abstractions: usize,
+
     /// Path to write JSON output.
     #[arg(short, long)]
     pub output: Option<String>,
@@ -93,4 +98,90 @@ pub struct Args {
     /// Print per-step progress output (top particles, follow stats, etc.).
     #[arg(long, default_value_t = false)]
     pub verbose: bool,
+}
+
+/// Runs the multi-abstraction search loop, returning the per-abstraction results,
+/// the corpus size after DSRs (before any abstractions), and the final combined cost.
+///
+/// After each abstraction is found, `fn_N(args...)` enodes are added directly to the
+/// egraph and unioned with their match roots, then the egraph is rebuilt. This avoids
+/// serialising programs to strings and re-parsing. The eclass arguments already carry
+/// all DSR equivalences, so no re-saturation is needed.
+pub fn multiple_step_search(egraph: lang::StitchEgraph, root: Id, args: &Args) -> (Vec<results::AbstractionResult>, usize, Option<usize>) {
+    let mut egraph = egraph;
+    let mut library = Vec::new();
+    let mut original_size = 0;
+    let mut final_cost = None;
+
+    for abstraction_idx in 0..args.num_abstractions {
+        let (best, iter_original_size, best_found_at, num_steps_run, result_egraph) = match args.search {
+            SearchKind::Smc => {
+                let r = smc::smc(egraph, root, args);
+                (r.best, r.original_size, r.best_found_at, r.num_steps_run, r.egraph)
+            }
+            SearchKind::BestFirst => {
+                let r = best_first::best_first(egraph, root, args);
+                (r.best, r.original_size, r.best_found_at, r.num_expansions, r.egraph)
+            }
+        };
+
+        if abstraction_idx == 0 {
+            original_size = iter_original_size;
+        }
+
+        match best {
+            None => break,
+            Some((best_cost, state)) => {
+                let pat_size = cost::compute_pattern_size(&state.pattern);
+                let usage_counts = search::compute_usage_counts(&result_egraph, root);
+                let usage_matches: usize = state.matches.iter().map(|m| usage_counts.get(&m.root_eclass).copied().unwrap_or(1)).sum();
+                let approx_cost = iter_original_size as i64 - pat_size as i64 * (usage_matches as i64 - 1);
+                let fn_name = format!("fn_{abstraction_idx}");
+                let (next_egraph, rewritten_programs) = apply_abstraction(result_egraph, root, &state, &fn_name);
+
+                final_cost = Some(best_cost);
+                library.push(results::AbstractionResult {
+                    pattern: format!("{fn_name}: {}", state.pattern),
+                    arity: state.pattern.vars.len(),
+                    pattern_size: pat_size,
+                    num_matches: state.matches.len(),
+                    usage_matches,
+                    approx_cost,
+                    num_steps_run,
+                    num_expansions: best_found_at.map(|n| n + 1),
+                    best_iteration: best_found_at,
+                    rewritten_programs,
+                });
+
+                if abstraction_idx + 1 < args.num_abstractions {
+                    egraph = next_egraph;
+                } else {
+                    break;
+                }
+            }
+        }
+    }
+
+    (library, original_size, final_cost)
+}
+
+/// Applies an abstraction to the egraph by adding `fn_name(args...)` enodes for every
+/// match substitution and unioning each with its match root, then rebuilds.
+///
+/// Returns the updated egraph and the rewritten program strings extracted from it.
+/// The eclass arguments already carry all DSR equivalences, so no re-saturation is needed.
+fn apply_abstraction(egraph: lang::StitchEgraph, root: Id, state: &search::SearchState, fn_name: &str) -> (lang::StitchEgraph, Vec<String>) {
+    let fn_sym: egg::Symbol = fn_name.into();
+    let mut egraph = egraph;
+    for m in &state.matches {
+        for subst in &m.substs {
+            let node = lang::StitchLang { op: fn_sym, children: subst.vars.clone() };
+            let x = egraph.add(node);
+            egraph.union(x, m.root_eclass);
+        }
+    }
+    egraph.rebuild();
+    let extractor = egg::Extractor::new(&egraph, egg::AstSize);
+    let programs = egraph[root].nodes[0].children.iter().map(|&child| extractor.find_best(child).1.to_string()).collect();
+    (egraph, programs)
 }
