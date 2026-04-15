@@ -181,7 +181,7 @@ def render(saved: dict, table: int) -> str:
              crs: list[float | None], ts: list[float | None]) -> str:
         """Render one data row with the best CR (max) and time (min) bolded."""
         cr_strs = bold_best(crs, ".2f", higher_is_better=True)
-        t_strs = bold_best(ts, ".1f", higher_is_better=False)
+        t_strs = bold_best(ts, ".3f", higher_is_better=False)
         return " & ".join([label, *size_cells, *cr_strs, *t_strs]) + " \\\\"
 
     for label, original, egraph_min, crs, ts in rows:
