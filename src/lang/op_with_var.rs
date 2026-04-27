@@ -1,6 +1,6 @@
 use std::fmt::{self, Display, Formatter};
 
-use super::{StitchDisc, StitchOp};
+use super::{StitchDisc, StitchOp, Weights};
 
 /// An op-type wrapper that adds a pattern-variable variant.
 ///
@@ -23,10 +23,10 @@ impl<O: Display> Display for OpWithVar<O> {
 }
 
 impl<O: StitchDisc> StitchDisc for OpWithVar<O> {
-    fn intrinsic_size(&self) -> u32 {
+    fn intrinsic_size(&self, weights: &Weights) -> u32 {
         match self {
-            Self::Node(o) => o.intrinsic_size(),
-            Self::Var(_) => 1,
+            Self::Node(o) => o.intrinsic_size(weights),
+            Self::Var(_) => weights.sym_var_cost,
         }
     }
 

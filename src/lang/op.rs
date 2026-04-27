@@ -2,14 +2,19 @@ use egg::Symbol;
 use std::fmt::{self, Debug, Display, Formatter};
 use std::hash::Hash;
 
+use super::Weights;
+
 /// Trait for any "thing that names an enode shape" — what egg calls a
 /// `Discriminant`. Used for hash-consing, equality, cost analysis, and
 /// pattern-var detection. Doesn't require parsing from a string, so structural
 /// discriminants and leaf ops both fit.
 pub trait StitchDisc: Hash + Eq + Clone + Ord + Display + Debug + Send + Sync + 'static {
-    /// The intrinsic size of this operator, used for AST size analysis.
-    fn intrinsic_size(&self) -> u32 {
-        1
+    /// Cost of an enode with this discriminant under the given weights. The
+    /// default treats the node as a leaf and scales by `sym_cost`; structural
+    /// discriminants (e.g. `LambdaCalcDisc::App`/`Lam`) override to read the
+    /// matching field.
+    fn intrinsic_size(&self, weights: &Weights) -> u32 {
+        weights.sym_var_cost
     }
     /// If this op represents a pattern variable, returns it. Default: not a var.
     /// Var-aware op types (`OpWithVar` and wrappers around it) override.

@@ -1,6 +1,6 @@
 use egg::Id;
 
-use super::{OpChildrenLanguage, OpWithVar, StitchDisc, StitchEgraph, StitchLanguage, StitchOp};
+use super::{LambdaCalcDisc, LambdaCalcLanguage, OpChildrenLanguage, OpWithVar, StitchDisc, StitchEgraph, StitchLanguage, StitchOp, Weights};
 
 /// A type-level type constructor `L<_>` for a language family.
 ///
@@ -14,6 +14,9 @@ use super::{OpChildrenLanguage, OpWithVar, StitchDisc, StitchEgraph, StitchLangu
 /// `Discriminant<O>` is the discriminant of `Apply<O>`. Often it's just `O`
 /// (`OpChildrenLanguage`), but languages with structural variants beyond a single
 /// leaf-op slot can use a wrapper sum so the discriminant carries the variant tag.
+///
+/// Cost weights are runtime values (`Weights`) carried on `StitchAnalysis`, so
+/// they no longer parameterize this trait.
 pub trait LanguageFamily: Clone + 'static {
     /// Discriminant type for `Apply<O>`. Only needs `StitchDisc` (hash/eq/size/var
     /// detection) — `from_name` is not required since the family knows how to
@@ -37,6 +40,11 @@ pub trait LanguageFamily: Clone + 'static {
     /// Add a `name(children...)` application to the egraph and return its Id.
     /// For families with binary `App` this builds a curried application chain.
     fn add_stub_application<O: StitchOp>(name: &str, children: Vec<Id>, egraph: &mut StitchEgraph<Self::Apply<O>>) -> Id;
+
+    /// Structural cost (sum of node costs over all enodes added by
+    /// `add_stub_application`) of an `arity`-arg stub application — the
+    /// head plus any spine nodes (e.g. curried `App`s) the family inserts.
+    fn stub_application_size<O: StitchOp>(name: &str, arity: usize, weights: &Weights) -> u32;
 
     /// Build a pattern leaf containing the given pattern variable.
     fn make_var<O: StitchOp>(v: egg::Var) -> Self::Apply<OpWithVar<O>>;
@@ -62,7 +70,57 @@ impl LanguageFamily for OpChildren {
         egraph.add(Self::make(O::from_name(name), children))
     }
 
+    fn stub_application_size<O: StitchOp>(name: &str, _arity: usize, weights: &Weights) -> u32 {
+        O::from_name(name).intrinsic_size(weights)
+    }
+
     fn make_var<O: StitchOp>(v: egg::Var) -> OpChildrenLanguage<OpWithVar<O>> {
         Self::make(OpWithVar::Var(v), vec![])
+    }
+}
+
+/// LambdaCalc family. Cost behavior is selected at runtime via the `Weights`
+/// stored on `StitchAnalysis` (defaults to all-ones for babble parity; tune
+/// per-kind via the `--sym-cost`/`--app-cost`/`--lam-cost` CLI flags).
+#[derive(Clone, Copy, Debug)]
+pub struct LambdaCalc;
+
+impl LanguageFamily for LambdaCalc {
+    type Discriminant<O: StitchOp> = LambdaCalcDisc<O>;
+    type Apply<O: StitchOp> = LambdaCalcLanguage<O>;
+
+    fn make<P: StitchOp>(op: LambdaCalcDisc<P>, kids: Vec<Id>) -> LambdaCalcLanguage<P> {
+        match (op, kids.as_slice()) {
+            (LambdaCalcDisc::Leaf(o), &[]) => LambdaCalcLanguage::Leaf(o),
+            (LambdaCalcDisc::App, &[f, a]) => LambdaCalcLanguage::App([f, a]),
+            (LambdaCalcDisc::Lam, &[b]) => LambdaCalcLanguage::Lam([b]),
+            (LambdaCalcDisc::Programs, _) => LambdaCalcLanguage::Programs(kids),
+            (op, _) => panic!("LambdaCalc::make: {op} got wrong arity ({} children)", kids.len()),
+        }
+    }
+
+    fn map_discriminant<A: StitchOp, B: StitchOp>(op: LambdaCalcDisc<A>, mut f: impl FnMut(A) -> B) -> LambdaCalcDisc<B> {
+        match op {
+            LambdaCalcDisc::Leaf(a) => LambdaCalcDisc::Leaf(f(a)),
+            LambdaCalcDisc::App => LambdaCalcDisc::App,
+            LambdaCalcDisc::Lam => LambdaCalcDisc::Lam,
+            LambdaCalcDisc::Programs => LambdaCalcDisc::Programs,
+        }
+    }
+
+    fn add_stub_application<O: StitchOp>(name: &str, children: Vec<Id>, egraph: &mut StitchEgraph<LambdaCalcLanguage<O>>) -> Id {
+        let mut current = egraph.add(LambdaCalcLanguage::Leaf(O::from_name(name)));
+        for child in children {
+            current = egraph.add(LambdaCalcLanguage::App([current, child]));
+        }
+        current
+    }
+
+    fn stub_application_size<O: StitchOp>(name: &str, arity: usize, weights: &Weights) -> u32 {
+        LambdaCalcDisc::Leaf(O::from_name(name)).intrinsic_size(weights) + arity as u32 * weights.app_cost
+    }
+
+    fn make_var<O: StitchOp>(v: egg::Var) -> LambdaCalcLanguage<OpWithVar<O>> {
+        Self::make(LambdaCalcDisc::Leaf(OpWithVar::Var(v)), vec![])
     }
 }

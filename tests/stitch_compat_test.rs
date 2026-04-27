@@ -191,3 +191,91 @@ fn arithmetic_aplusbplusc() {
 fn arithmetic_aplusbplus1234() {
     check_fixture("data/domains/simple-arithmetic/aplusbplus1234.json", &["-r", ARITH_RULES], false);
 }
+
+#[test]
+fn common_start() {
+    check_fixture("data/domains/basic-apps/common-start.json", &["-r", ARITH_RULES, "--language", "lambda-calc"], true);
+}
+
+/// Collapse an s-expression to a sorted multiset of its atoms, discarding
+/// structure. Used by `arith_rewrites` because plus is associative+commutative,
+/// so several distinct abstraction shapes are all equally valid solutions —
+/// comparing atom multisets accepts any of them without enumerating each tree.
+fn all_symbols_hack(x: &str) -> Vec<String> {
+    let x = x.replace("(", " ").replace(")", " ");
+    let mut symbols: Vec<_> = x.split_whitespace().map(|s| s.to_string()).collect();
+    symbols.sort();
+    symbols
+}
+
+/// egg prints metavars as `?#0`; normalize to the cleaner `#0` form.
+fn egg_to_stitch(s: &str) -> String {
+    s.replace("?#", "#")
+}
+
+/// Returns the abstraction bodies (with `fn_N: ` prefix stripped) found in the
+/// run's library.
+fn abstraction_bodies(run: &Value) -> Vec<String> {
+    run.get("library")
+        .and_then(|l| l.as_array())
+        .map(|arr| {
+            arr.iter()
+                .map(|e| {
+                    let p = e.get("pattern").and_then(|p| p.as_str()).expect("pattern string");
+                    egg_to_stitch(p.split_once(": ").expect("pattern prefixed with fn_N:").1)
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// Returns the rewritten corpus from the last library entry, falling back to
+/// the supplied original program list when no abstraction was found.
+fn rewritten_corpus(run: &Value, original: &[String]) -> Vec<String> {
+    if let Some(last) = run.get("library").and_then(|l| l.as_array()).and_then(|l| l.last())
+        && let Some(arr) = last.get("rewritten_programs").and_then(|p| p.as_array())
+    {
+        return arr.iter().filter_map(|s| s.as_str().map(String::from)).collect();
+    }
+    original.to_vec()
+}
+
+#[test]
+fn arith_rewrites() {
+    let input = "data/domains/basic-apps/multi-arg-assoc.json";
+    let extra_args = &["-r", "data/domains/basic-apps/app-arith.rewrites", "--language", "lambda-calc", "--max-arity", "0"];
+    let bf = run_backend("best-first", input, extra_args);
+    let smc = run_backend("smc", input, extra_args);
+    let original: Vec<String> = serde_json::from_str(&fs::read_to_string(input).unwrap_or_else(|e| panic!("read {input}: {e}"))).unwrap_or_else(|e| panic!("parse {input}: {e}"));
+    for r in &[bf, smc] {
+        let bodies = abstraction_bodies(r);
+        assert!(bodies.len() == 1, "expected exactly one abstraction");
+        let abstr = all_symbols_hack(&bodies[0]);
+        if abstr != ["+", "+", "a", "b", "c", "d"] && abstr != ["+", "+", "+", "a", "b", "c", "d"] {
+            panic!("bad abstr: {:?}", abstr);
+        }
+        let rewr = rewritten_corpus(r, &original).iter().map(|x| all_symbols_hack(x)).collect::<Vec<_>>();
+        let rewr = rewr.iter().map(|x| x.iter().filter(|x| **x != <&str as Into<String>>::into("+")).collect::<Vec<_>>()).collect::<Vec<_>>();
+        assert_eq!(
+            rewr,
+            vec![
+                // these 3 can be rewritten
+                vec!["fn_0", "g"],
+                vec!["f", "fn_0"],
+                vec!["e", "fn_0"],
+                // this one can't be
+                vec!["*", "a", "b", "c", "d", "e"]
+            ]
+        )
+    }
+}
+
+#[test]
+fn varying_head() {
+    check_fixture("data/domains/basic-apps/varying-head.json", &["--language", "lambda-calc"], true);
+}
+
+#[test]
+fn multiple_with_apps() {
+    check_fixture("data/domains/basic-apps/multiple-with-apps.json", &["--language", "lambda-calc"], true);
+}

@@ -18,7 +18,7 @@ use egg::{Id, Language};
 
 pub use best_first::SearchPriority;
 
-use crate::lang::{LanguageFamily, StitchEgraph, StitchLanguage, StitchOp};
+use crate::lang::{LanguageFamily, StitchEgraph, StitchLanguage, StitchOp, Weights};
 
 /// Which search algorithm to run.
 #[derive(ValueEnum, Clone, Debug)]
@@ -105,6 +105,28 @@ pub struct Args {
     /// Print per-step progress output (top particles, follow stats, etc.).
     #[arg(long, default_value_t = false)]
     pub verbose: bool,
+
+    /// Selects the language family the pipeline runs over. Patterns/programs/rules
+    /// are always written in user-facing flat form; the language layer handles any
+    /// conversion (e.g. currying for `lambda-calc`) at the boundary.
+    #[arg(long, value_enum, default_value_t = LanguageChoice::OpChildren)]
+    pub language: LanguageChoice,
+
+    /// Cost weights applied per enode kind.
+    #[command(flatten)]
+    pub weights: Weights,
+}
+
+/// Which language family `multiple_step_search` runs over.
+#[derive(Copy, Clone, Debug, ValueEnum)]
+pub enum LanguageChoice {
+    /// Flat n-ary nodes (`(f a b c)` is a single enode). Default.
+    #[value(name = "op-children")]
+    OpChildren,
+    /// Lambda-calculus shape: curried binary `App`, unary `Lam`, multi-child
+    /// `Programs` root.
+    #[value(name = "lambda-calc")]
+    LambdaCalc,
 }
 
 /// Runs the multi-abstraction search loop, returning the per-abstraction results,
@@ -140,7 +162,7 @@ pub fn multiple_step_search<F: LanguageFamily, O: StitchOp>(egraph: StitchEgraph
         match best {
             None => break,
             Some((best_cost, state)) => {
-                let pat_size = cost::compute_pattern_size(&state.pattern);
+                let pat_size = cost::compute_pattern_size(&state.pattern, &result_egraph.analysis.weights);
                 let usage_counts = search::compute_usage_counts(&result_egraph, root);
                 let usage_matches: usize = state.matches.iter().map(|m| usage_counts.get(&m.root_eclass).copied().unwrap_or(1)).sum();
                 let approx_cost = iter_original_size as i64 - pat_size as i64 * (usage_matches as i64 - 1);
@@ -196,7 +218,8 @@ fn apply_abstraction<F: LanguageFamily, O: StitchOp>(egraph: StitchEgraph<F::App
     let programs: Vec<String> = programs_node.children().iter().map(|&child| <F::Apply<O> as StitchLanguage>::display_recexpr(&extractor.find_best(child).1)).collect();
 
     if rebuild {
-        let (fresh_egraph, fresh_root) = io::egraph_from_programs(&programs, rule_file);
+        let weights = egraph.analysis.weights;
+        let (fresh_egraph, fresh_root) = io::egraph_from_programs(&programs, rule_file, weights);
         (fresh_egraph, fresh_root, programs)
     } else {
         (egraph, root, programs)
