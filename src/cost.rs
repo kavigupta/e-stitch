@@ -1,4 +1,4 @@
-use crate::lang::{LanguageFamily, StitchDisc, StitchEgraph, StitchLanguage, StitchOp, Weights};
+use crate::lang::{LanguageFamily, StitchDisc, StitchEgraph, StitchLanguage, StitchOp, Weights, enode_fv};
 use crate::matching::Subst;
 use crate::pattern::Pattern;
 use crate::search::SearchState;
@@ -86,7 +86,7 @@ pub(crate) fn compute_size<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph
         eclass_to_matches.insert(m.root_eclass, &m.substs);
     }
 
-    let get_size = |eclass: Id, s_u_r: &FxHashMap<Id, i64>| -> i64 { s_u_r.get(&eclass).cloned().unwrap_or(egraph[eclass].data as i64) };
+    let get_size = |eclass: Id, s_u_r: &FxHashMap<Id, i64>| -> i64 { s_u_r.get(&eclass).cloned().unwrap_or(egraph[eclass].data.size as i64) };
 
     let mut size_under_rewrite = FxHashMap::<Id, i64>::default();
     let mut work_queue = BinaryHeap::new();
@@ -128,7 +128,7 @@ pub(crate) fn compute_size<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph
     }
     let final_size = get_size(root, &size_under_rewrite);
     if check_slow {
-        let slow_size = build_rewritten_egraph(egraph, search_state)[root].data as i64;
+        let slow_size = build_rewritten_egraph(egraph, search_state)[root].data.size as i64;
         assert_eq!(final_size, slow_size, "Fast rewrite size {} != slow rewrite size {}", final_size, slow_size);
     }
     final_size as usize
@@ -152,5 +152,38 @@ pub(crate) fn build_rewritten_egraph<F: LanguageFamily, O: StitchOp>(egraph: &St
 pub fn extract_rewritten_programs<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F::Apply<O>>, root: egg::Id, search_state: &SearchState<F, O>) -> Vec<String> {
     let rewritten = build_rewritten_egraph(egraph, search_state);
     let extractor = egg::Extractor::new(&rewritten, egg::AstSize);
-    rewritten[root].nodes[0].children().iter().map(|&child| <F::Apply<O> as StitchLanguage>::display_recexpr(&extractor.find_best(child).1)).collect()
+    rewritten[root].nodes[0]
+        .children()
+        .iter()
+        .map(|&child| {
+            let (_, expr) = extractor.find_best(child);
+            check_fvs_are_as_expected::<F::Apply<O>>(&expr, &rewritten[child].data.fv);
+            <F::Apply<O> as StitchLanguage>::display_recexpr(&expr)
+        })
+        .collect()
+}
+
+/// Computes the exact syntactic free-variable set at every position of `expr`,
+/// indexed by `usize::from(Id)`. Shares its per-enode rule with
+/// `StitchAnalysis::make` via `enode_fv`.
+pub fn recexpr_fv<L: StitchLanguage>(expr: &RecExpr<L>) -> Vec<FxHashSet<u32>> {
+    let nodes: &[L] = expr.as_ref();
+    let mut fv: Vec<FxHashSet<u32>> = vec![FxHashSet::default(); nodes.len()];
+    for (i, node) in nodes.iter().enumerate() {
+        fv[i] = enode_fv(node, |c| &fv[usize::from(c)]);
+    }
+    fv
+}
+
+/// Asserts that the extracted term's actual syntactic fv matches the egraph
+/// analysis's recorded fv. Under intersection-fv semantics + AstSize
+/// extraction, the minimal-size representative is also the fv-minimal one,
+/// so its fv should equal the intersection across reps — i.e. `expected`.
+/// A mismatch in either direction means the assumption "min-size ⇒ min-fv"
+/// failed for this extraction; downstream soundness checks that read
+/// `data.fv` lose their guarantee.
+pub fn check_fvs_are_as_expected<L: StitchLanguage>(expr: &RecExpr<L>, expected: &FxHashSet<u32>) {
+    let fv = recexpr_fv(expr);
+    let actual = fv.last().expect("non-empty RecExpr");
+    assert_eq!(actual, expected, "extracted RecExpr fv {:?} differs from egraph analysis fv {:?}; intersection-fv assumption (min-size rep is fv-minimal) violated", actual, expected,);
 }
