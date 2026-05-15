@@ -54,11 +54,8 @@ impl<F: LanguageFamily, O: StitchOp> SeenTracker<F, O> {
 }
 
 /// True iff `target` is a free De Bruijn variable leaf with index `i ≥ d_k`.
-fn target_is_free_db_var<L: Language>(target: &L, d_k: u32) -> bool
-where
-    L::Discriminant: StitchDisc,
-{
-    target.children().is_empty() && target.discriminant().de_bruijn_index().is_some_and(|i| i >= 0 && (i as u32) >= d_k)
+fn target_is_free_db_var(dbidx: i32, d_k: u32) -> bool {
+    (dbidx as u32) >= d_k
 }
 
 /// True iff `target` cannot be expanded to in a literal expansion.
@@ -67,7 +64,8 @@ fn invalid_literal_expansion<L: Language>(target: &L, depth: u32) -> bool
 where
     L::Discriminant: StitchDisc,
 {
-    target_is_free_db_var(target, depth)
+    let Some(dbidx) = target.discriminant().de_bruijn_index() else { return false };
+    target_is_free_db_var(dbidx, depth)
 }
 
 /// A deterministic move taken at a search node: either expanding a pattern variable
