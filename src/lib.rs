@@ -12,6 +12,7 @@ pub mod results;
 pub mod revexpr;
 pub mod search;
 pub mod shared;
+pub mod shift_equal;
 pub mod smc;
 
 use clap::{Parser, ValueEnum};

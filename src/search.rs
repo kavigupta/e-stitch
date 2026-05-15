@@ -2,6 +2,7 @@ use crate::lang::{LanguageFamily, OpWithVar, StitchDisc, StitchEgraph, StitchOp}
 use crate::matching::{MatchAtEClass, Subst, identity_matches};
 use crate::pattern::Pattern;
 use crate::revexpr::RevExpr;
+use crate::shift_equal::shift_equal;
 use egg::{Id, Language};
 use rand::Rng;
 use rand::rngs::StdRng;
@@ -59,13 +60,12 @@ fn target_is_free_db_var(dbidx: i32, d_k: u32) -> bool {
 }
 
 /// True iff `target` cannot be expanded to in a literal expansion.
-/// Currently the only such case is a free DB-var leaf.
-fn invalid_literal_expansion<L: Language>(target: &L, depth: u32) -> bool
+fn invalid_literal_expansion<L: Language>(target: &L, depth: u32, cross_depth: bool) -> bool
 where
     L::Discriminant: StitchDisc,
 {
     let Some(dbidx) = target.discriminant().de_bruijn_index() else { return false };
-    target_is_free_db_var(dbidx, depth)
+    cross_depth || target_is_free_db_var(dbidx, depth)
 }
 
 /// A deterministic move taken at a search node: either expanding a pattern variable
@@ -142,6 +142,9 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
     /// state unchanged). The returned `Action` is also a hashable dedup key,
     /// so callers can collapse identical samples and apply each unique one once.
     pub fn sample_random_expansion(&self, shared: &SharedSearchData<F, O>, verbose: bool, rng: &mut StdRng) -> Option<Action<F::Discriminant<O>>> {
+        if self.matches.is_empty() {
+            return None;
+        }
         let match_idx = if shared.weight_by_usage {
             let mut weights: Vec<f64> = self.matches.iter().map(|m| shared.usage_counts.get(&m.root_eclass).copied().unwrap_or(1) as f64).collect();
             let weights_acc = crate::smc::normalize_and_accumulate(&mut weights);
@@ -184,16 +187,12 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
                 .iter()
                 .enumerate()
                 .filter_map(|(idx, id)| {
-                    if idx == var_idx || *id != target_id {
+                    if idx == var_idx {
                         return None;
                     }
-                    let keep_idx = idx.min(var_idx);
                     let d_a = self.pattern.var_depth[var_idx];
                     let d_b = self.pattern.var_depth[idx];
-                    let min_depth = d_a.min(d_b);
-                    let merged_depth = d_a.max(d_b);
-                    let kept_fv = &shared.egraph[subst.vars[keep_idx]].data.fv;
-                    if kept_fv.iter().all(|&i| i < min_depth as i32 || i >= merged_depth as i32) { Some(idx) } else { None }
+                    if shift_equal(*id, target_id, d_b, d_a, &shared.egraph) { Some(idx) } else { None }
                 })
                 .collect();
             if !reuse_candidates.is_empty() {
@@ -205,9 +204,10 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
             }
         }
 
-        let target_eclass = &shared.egraph[target_id];
         let d_k = self.pattern.var_depth[var_idx];
-        let candidates: Vec<&F::Apply<O>> = target_eclass.nodes.iter().filter(|n| !invalid_literal_expansion(*n, d_k)).collect();
+        let cross_depth = self.pattern.var_cross_depth[var_idx];
+        let target_eclass = &shared.egraph[target_id];
+        let candidates: Vec<&F::Apply<O>> = target_eclass.nodes.iter().filter(|n| !invalid_literal_expansion(*n, d_k, cross_depth)).collect();
         if candidates.is_empty() {
             return None;
         }
@@ -252,8 +252,9 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
         // bound the cross-depth gap, but `pattern.reuse` collapses them.
         let d_a = self.pattern.var_depth[var_idx];
         let d_b = self.pattern.var_depth[second_var_idx];
+        let shallow_idx = if d_a <= d_b { var_idx } else { second_var_idx };
         self.pattern.reuse(var_idx, second_var_idx);
-        self.subset_matches_reuse(var_idx, second_var_idx, d_a.min(d_b), d_a.max(d_b), shared);
+        self.subset_matches_reuse(var_idx, second_var_idx, shallow_idx, d_a.min(d_b), d_a.max(d_b), shared);
     }
 
     /// Updates all matches by transforming each substitution via the given closure,
@@ -309,18 +310,18 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
     /// whose kept-eclass fv lands in `[min_depth, merged_depth)` are
     /// representable at the deep site but unbound at the shallow one — those
     /// are dropped. Same-depth reuse has an empty gap.
-    pub fn subset_matches_reuse(&mut self, var_idx: usize, second_var_idx: usize, min_depth: u32, merged_depth: u32, shared: &SharedSearchData<F, O>) {
+    pub fn subset_matches_reuse(&mut self, var_idx: usize, second_var_idx: usize, shallow_idx: usize, min_depth: u32, merged_depth: u32, shared: &SharedSearchData<F, O>) {
         let keep_idx = var_idx.min(second_var_idx);
         let drop_idx = var_idx.max(second_var_idx);
+        let deep_idx = if shallow_idx == var_idx { second_var_idx } else { var_idx };
         self.update_matches(|subst, out| {
-            if subst.vars[var_idx] != subst.vars[second_var_idx] {
-                return;
-            }
-            let kept_fv = &shared.egraph[subst.vars[keep_idx]].data.fv;
-            if !kept_fv.iter().all(|&i| i < min_depth as i32 || i >= merged_depth as i32) {
+            let shallow_id = subst.vars[shallow_idx];
+            let deep_id = subst.vars[deep_idx];
+            if !shift_equal(shallow_id, deep_id, min_depth, merged_depth, &shared.egraph) {
                 return;
             }
             let mut new_subst = subst.clone();
+            new_subst.vars[keep_idx] = shallow_id;
             new_subst.vars.remove(drop_idx);
             out.push(new_subst);
         });
@@ -354,7 +355,9 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
         let n = self.pattern.vars.len();
         for i in 0..n {
             for j in (i + 1)..n {
-                let unifiable = self.matches.iter().any(|m| m.substs.iter().any(|s| s.vars[i] == s.vars[j]));
+                let di = self.pattern.var_depth[i];
+                let dj = self.pattern.var_depth[j];
+                let unifiable = self.matches.iter().any(|m| m.substs.iter().any(|s| shift_equal(s.vars[i], s.vars[j], di, dj, &shared.egraph)));
                 if !unifiable {
                     continue;
                 }
@@ -376,13 +379,14 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
         // Literal expansions.
         for var_idx in 0..self.pattern.vars.len() {
             let d_k = self.pattern.var_depth[var_idx];
+            let cross_depth = self.pattern.var_cross_depth[var_idx];
             let mut seen: FxHashSet<(F::Discriminant<O>, usize)> = FxHashSet::default();
             let mut shapes: Vec<F::Apply<O>> = Vec::new();
             for m in &self.matches {
                 for subst in &m.substs {
                     let eclass = &shared.egraph[subst.vars[var_idx]];
                     for node in &eclass.nodes {
-                        if invalid_literal_expansion(node, d_k) {
+                        if invalid_literal_expansion(node, d_k, cross_depth) {
                             continue;
                         }
                         let key = (node.discriminant(), node.children().len());

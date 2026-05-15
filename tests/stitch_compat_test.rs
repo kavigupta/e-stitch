@@ -241,6 +241,24 @@ fn tmp_minimal() {
 #[test]
 fn reuse_at_different_depths() {
     check_fixture("data/domains/stitch/reuse-at-different-depths.json", &["--language", "lambda-calc"], true);
+    // CRITICAL: this is the whole point of the `variables-at-multiple-depths`
+    // branch. The two programs share `(+ $0 3 4 (lam (+ $1 6 7)))` at depths
+    // that differ by one — `$0` and `$1` are shift-variants of the same value.
+    // A correct shift-aware reuse merges the two metavar occurrences into a
+    // single arity-1 abstraction; any future change that loses this and falls
+    // back to an arity-2 (non-reused) abstraction has reverted the branch's
+    // flagship behavior. Pin arity == 1 directly so the assertion survives
+    // re-blessing.
+    for search in ["best-first", "smc"] {
+        let v = run_backend(search, "data/domains/stitch/reuse-at-different-depths.json", &["--language", "lambda-calc"]);
+        let library = v.get("library").and_then(|l| l.as_array()).unwrap_or_else(|| panic!("{search}: missing library"));
+        assert_eq!(library.len(), 1, "{search}: expected exactly one abstraction, got {library:#?}");
+        let arity = library[0].get("arity").and_then(|a| a.as_u64()).unwrap_or_else(|| panic!("{search}: arity missing"));
+        assert_eq!(
+            arity, 1,
+            "{search}: shifted-variant reuse must collapse both occurrences into a single metavar (arity 1), got arity {arity} — this regresses the whole point of the variables-at-multiple-depths branch"
+        );
+    }
 }
 
 /// Regression: `shift_equal`'s `a == b` shortcut used to accept any same
