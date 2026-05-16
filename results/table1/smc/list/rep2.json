@@ -6,7 +6,7 @@
     "initial_cost": 166,
     "final_cost": 154,
     "compression_ratio": 1.077922077922078,
-    "elapsed_secs": 0.053584542,
+    "elapsed_secs": 0.054231956,
     "library": [
       "fn_0: (map (lam (index $0 (cons (+ 1 ?#0) (range $0)))))"
     ],
@@ -19,7 +19,7 @@
     "initial_cost": 216,
     "final_cost": 213,
     "compression_ratio": 1.0140845070422535,
-    "elapsed_secs": 0.04859339,
+    "elapsed_secs": 0.049122201,
     "library": [
       "fn_1: (+ 1)"
     ],
@@ -32,7 +32,7 @@
     "initial_cost": 326,
     "final_cost": 307,
     "compression_ratio": 1.0618892508143323,
-    "elapsed_secs": 0.05260281,
+    "elapsed_secs": 0.058692072,
     "library": [
       "fn_2: (+ 1 1)"
     ],
@@ -45,7 +45,7 @@
     "initial_cost": 429,
     "final_cost": 420,
     "compression_ratio": 1.0214285714285714,
-    "elapsed_secs": 0.052076303,
+    "elapsed_secs": 0.066227457,
     "library": [
       "fn_5: (is-prime (- ?#0 (if (is-square ?#0) 1 ?#0)))"
     ],
@@ -58,7 +58,7 @@
     "initial_cost": 498,
     "final_cost": 490,
     "compression_ratio": 1.0163265306122449,
-    "elapsed_secs": 0.049022885,
+    "elapsed_secs": 0.047404359,
     "library": [
       "fn_7: (lam (fn_0 1 (fn_0 1 $0)))"
     ],
@@ -71,7 +71,7 @@
     "initial_cost": 770,
     "final_cost": 754,
     "compression_ratio": 1.0212201591511936,
-    "elapsed_secs": 0.059239128,
+    "elapsed_secs": 0.067589141,
     "library": [
       "fn_8: (lam (map (?#0 $0) $0))"
     ],
@@ -84,7 +84,7 @@
     "initial_cost": 896,
     "final_cost": 880,
     "compression_ratio": 1.018181818181818,
-    "elapsed_secs": 0.058164412,
+    "elapsed_secs": 0.071572743,
     "library": [
       "fn_9: (lam (map (?#0 $0) $0))"
     ],
@@ -97,7 +97,7 @@
     "initial_cost": 1101,
     "final_cost": 1075,
     "compression_ratio": 1.024186046511628,
-    "elapsed_secs": 0.068790735,
+    "elapsed_secs": 0.071920205,
     "library": [
       "fn_11: (lam (map (?#0 $0) $0))"
     ],
@@ -110,7 +110,7 @@
     "initial_cost": 1002,
     "final_cost": 976,
     "compression_ratio": 1.026639344262295,
-    "elapsed_secs": 0.059089939,
+    "elapsed_secs": 0.069718184,
     "library": [
       "fn_13: (lam (map (?#0 $0) $0))"
     ],
@@ -123,7 +123,7 @@
     "initial_cost": 1052,
     "final_cost": 1026,
     "compression_ratio": 1.0253411306042886,
-    "elapsed_secs": 0.064490839,
+    "elapsed_secs": 0.072475546,
     "library": [
       "fn_14: (lam (map (?#0 $0) $0))"
     ],
@@ -136,7 +136,7 @@
     "initial_cost": 1065,
     "final_cost": 1041,
     "compression_ratio": 1.0230547550432276,
-    "elapsed_secs": 0.067259032,
+    "elapsed_secs": 0.069284731,
     "library": [
       "fn_17: (lam (map (?#0 $0) $0))"
     ],
@@ -149,7 +149,7 @@
     "initial_cost": 171,
     "final_cost": 148,
     "compression_ratio": 1.1554054054054055,
-    "elapsed_secs": 0.035998274,
+    "elapsed_secs": 0.042367091,
     "library": [
       "fn_0: (+ 1 1)"
     ],
@@ -162,7 +162,7 @@
     "initial_cost": 215,
     "final_cost": 203,
     "compression_ratio": 1.0591133004926108,
-    "elapsed_secs": 0.030659731,
+    "elapsed_secs": 0.035293743,
     "library": [
       "fn_20: (lam (map ?#0 $0))"
     ],
@@ -175,7 +175,7 @@
     "initial_cost": 286,
     "final_cost": 262,
     "compression_ratio": 1.0916030534351144,
-    "elapsed_secs": 0.041555258,
+    "elapsed_secs": 0.040498696,
     "library": [
       "fn_23: (lam (fold $0 (?#0 $0) (lam (lam (cons $1 $0)))))"
     ],
@@ -186,11 +186,11 @@
     "domain": "list",
     "file": "list_hard_test_ellisk_2019-02-15T11.31.39__bench003_it3",
     "initial_cost": 322,
-    "final_cost": 317,
-    "compression_ratio": 1.0157728706624605,
-    "elapsed_secs": 0.03575625,
+    "final_cost": 315,
+    "compression_ratio": 1.0222222222222221,
+    "elapsed_secs": 0.037607994,
     "library": [
-      "fn_26: (lam (lam (?#0 $0 $1)))"
+      "fn_26: (is-square (?#0 (lam (lam (?#1 $0 $1)))))"
     ],
     "egraph_min_term_size": 323.0
   },
@@ -199,11 +199,11 @@
     "domain": "list",
     "file": "list_hard_test_ellisk_2019-02-15T11.31.39__bench004_it4",
     "initial_cost": 424,
-    "final_cost": 411,
-    "compression_ratio": 1.0316301703163018,
-    "elapsed_secs": 0.056995169,
+    "final_cost": 398,
+    "compression_ratio": 1.065326633165829,
+    "elapsed_secs": 0.060896487,
     "library": [
-      "fn_27: (fold ?#0 empty (lam (lam (if (?#1 $1 $0) (cons $1 $0) $0))))"
+      "fn_27: (lam (fold $0 empty (lam (lam (if (?#0 $1) (cons $1 $0) $0)))))"
     ],
     "egraph_min_term_size": 425.0
   },
@@ -212,11 +212,11 @@
     "domain": "list",
     "file": "list_hard_test_ellisk_2019-02-15T11.31.39__bench005_it5",
     "initial_cost": 481,
-    "final_cost": 466,
-    "compression_ratio": 1.0321888412017168,
-    "elapsed_secs": 0.037914138,
+    "final_cost": 471,
+    "compression_ratio": 1.0212314225053079,
+    "elapsed_secs": 0.03922686,
     "library": [
-      "fn_27: (lam (fn_11 $0 (lam (is-prime (mod (+ $0 $0) fn_19)))))"
+      "fn_27: (lam (is-prime (mod (+ $0 $0) fn_19)))"
     ],
     "egraph_min_term_size": 482.0
   },
@@ -225,11 +225,11 @@
     "domain": "list",
     "file": "list_hard_test_ellisk_2019-02-15T11.31.39__bench006_it6",
     "initial_cost": 549,
-    "final_cost": 540,
-    "compression_ratio": 1.0166666666666666,
-    "elapsed_secs": 0.038440746,
+    "final_cost": 535,
+    "compression_ratio": 1.0261682242990655,
+    "elapsed_secs": 0.042101052,
     "library": [
-      "fn_28: (lam (fn_25 $0 ?#0))"
+      "fn_28: (lam (map (lam (?#0 $0 $0)) $0))"
     ],
     "egraph_min_term_size": 550.0
   },
@@ -240,7 +240,7 @@
     "initial_cost": 651,
     "final_cost": 627,
     "compression_ratio": 1.0382775119617225,
-    "elapsed_secs": 0.051762694,
+    "elapsed_secs": 0.051110401,
     "library": [
       "fn_29: (lam (map (lam (?#0 $0 $0)) $0))"
     ],
@@ -253,7 +253,7 @@
     "initial_cost": 751,
     "final_cost": 727,
     "compression_ratio": 1.0330123796423658,
-    "elapsed_secs": 0.070081396,
+    "elapsed_secs": 0.06292381,
     "library": [
       "fn_30: (lam (map (lam (?#0 $0 $0)) $0))"
     ],
@@ -264,11 +264,11 @@
     "domain": "list",
     "file": "list_hard_test_ellisk_2019-02-15T11.31.39__bench009_it11",
     "initial_cost": 900,
-    "final_cost": 884,
-    "compression_ratio": 1.0180995475113122,
-    "elapsed_secs": 0.064907741,
+    "final_cost": 887,
+    "compression_ratio": 1.0146561443066517,
+    "elapsed_secs": 0.071907181,
     "library": [
-      "fn_30: (lam (map (?#0 $0) $0))"
+      "fn_30: (fn_11 ?#0 (lam (?#1 $0)))"
     ],
     "egraph_min_term_size": 901.0
   },
@@ -279,7 +279,7 @@
     "initial_cost": 837,
     "final_cost": 813,
     "compression_ratio": 1.029520295202952,
-    "elapsed_secs": 0.053832728,
+    "elapsed_secs": 0.061312057,
     "library": [
       "fn_33: (lam (map (lam (?#0 $0 $0)) $0))"
     ],
@@ -292,7 +292,7 @@
     "initial_cost": 903,
     "final_cost": 881,
     "compression_ratio": 1.024971623155505,
-    "elapsed_secs": 0.060481369,
+    "elapsed_secs": 0.061776258,
     "library": [
       "fn_34: (fn_11 ?#0 (lam (?#1 $0)))"
     ],
@@ -305,7 +305,7 @@
     "initial_cost": 146,
     "final_cost": 133,
     "compression_ratio": 1.0977443609022557,
-    "elapsed_secs": 0.075005252,
+    "elapsed_secs": 0.096987596,
     "library": [
       "fn_0: (cons (car ?#0) (cons (car (cdr ?#0)) empty))"
     ],
@@ -318,7 +318,7 @@
     "initial_cost": 212,
     "final_cost": 201,
     "compression_ratio": 1.054726368159204,
-    "elapsed_secs": 0.075187263,
+    "elapsed_secs": 0.079798763,
     "library": [
       "fn_36: (fold ?#0 1 (lam (lam (* $0 $1))))"
     ],
@@ -329,11 +329,11 @@
     "domain": "list",
     "file": "list_hard_test_ellisk_2019-02-15T11.35.48__bench002_it2",
     "initial_cost": 288,
-    "final_cost": 262,
-    "compression_ratio": 1.099236641221374,
-    "elapsed_secs": 0.066462498,
+    "final_cost": 266,
+    "compression_ratio": 1.0827067669172932,
+    "elapsed_secs": 0.071086421,
     "library": [
-      "fn_38: (lam (map (lam (?#0 $0 (?#1 $0))) $0))"
+      "fn_38: (lam (map ?#0 $0))"
     ],
     "egraph_min_term_size": 285.0
   },
@@ -344,7 +344,7 @@
     "initial_cost": 400,
     "final_cost": 365,
     "compression_ratio": 1.095890410958904,
-    "elapsed_secs": 0.105912597,
+    "elapsed_secs": 0.114224117,
     "library": [
       "fn_40: (lam (map ?#0 $0))"
     ],
@@ -355,11 +355,11 @@
     "domain": "list",
     "file": "list_hard_test_ellisk_2019-02-15T11.35.48__bench004_it4",
     "initial_cost": 490,
-    "final_cost": 443,
-    "compression_ratio": 1.1060948081264108,
-    "elapsed_secs": 0.10346717,
+    "final_cost": 446,
+    "compression_ratio": 1.0986547085201794,
+    "elapsed_secs": 0.116868517,
     "library": [
-      "fn_41: (lam (map ?#0 $0))"
+      "fn_41: (lam (map (lam (?#0 $0)) $0))"
     ],
     "egraph_min_term_size": 483.0
   },
@@ -370,7 +370,7 @@
     "initial_cost": 632,
     "final_cost": 588,
     "compression_ratio": 1.0748299319727892,
-    "elapsed_secs": 0.105768196,
+    "elapsed_secs": 0.12476556,
     "library": [
       "fn_42: (lam (map ?#0 $0))"
     ],
@@ -383,7 +383,7 @@
     "initial_cost": 679,
     "final_cost": 630,
     "compression_ratio": 1.0777777777777777,
-    "elapsed_secs": 0.072896246,
+    "elapsed_secs": 0.08388608,
     "library": [
       "fn_45: (lam (map ?#0 $0))"
     ],
@@ -396,7 +396,7 @@
     "initial_cost": 739,
     "final_cost": 704,
     "compression_ratio": 1.0497159090909092,
-    "elapsed_secs": 0.078393488,
+    "elapsed_secs": 0.086764389,
     "library": [
       "fn_46: (lam (map ?#0 $0))"
     ],
@@ -409,7 +409,7 @@
     "initial_cost": 744,
     "final_cost": 720,
     "compression_ratio": 1.0333333333333334,
-    "elapsed_secs": 0.042387078,
+    "elapsed_secs": 0.049703392,
     "library": [
       "fn_50: (lam (map ?#0 $0))"
     ],
@@ -420,11 +420,11 @@
     "domain": "list",
     "file": "list_hard_test_ellisk_2019-02-15T11.35.48__bench009_it10",
     "initial_cost": 883,
-    "final_cost": 864,
-    "compression_ratio": 1.0219907407407407,
-    "elapsed_secs": 0.049757073,
+    "final_cost": 867,
+    "compression_ratio": 1.0184544405997693,
+    "elapsed_secs": 0.054499398,
     "library": [
-      "fn_52: (lam (map (lam (?#0 $0 $0)) $0))"
+      "fn_52: (lam (map (?#0 $0) $0))"
     ],
     "egraph_min_term_size": 884.0
   },
@@ -433,11 +433,11 @@
     "domain": "list",
     "file": "list_hard_test_ellisk_2019-02-15T11.35.48__bench010_it12",
     "initial_cost": 917,
-    "final_cost": 901,
-    "compression_ratio": 1.0177580466148723,
-    "elapsed_secs": 0.059542608,
+    "final_cost": 898,
+    "compression_ratio": 1.0211581291759466,
+    "elapsed_secs": 0.053401278,
     "library": [
-      "fn_53: (lam (map (?#0 $0) $0))"
+      "fn_53: (lam (map (lam (?#0 $0 $0)) $0))"
     ],
     "egraph_min_term_size": 918.0
   },
@@ -448,7 +448,7 @@
     "initial_cost": 919,
     "final_cost": 891,
     "compression_ratio": 1.0314253647586982,
-    "elapsed_secs": 0.062309658,
+    "elapsed_secs": 0.062434482,
     "library": [
       "fn_54: (fn_51 ?#0 (lam (?#1 $0)))"
     ],
@@ -461,7 +461,7 @@
     "initial_cost": 176,
     "final_cost": 165,
     "compression_ratio": 1.0666666666666667,
-    "elapsed_secs": 0.04538914,
+    "elapsed_secs": 0.052556172,
     "library": [
       "fn_0: (+ 1)"
     ],
@@ -474,7 +474,7 @@
     "initial_cost": 245,
     "final_cost": 236,
     "compression_ratio": 1.0381355932203389,
-    "elapsed_secs": 0.048992939,
+    "elapsed_secs": 0.058403121,
     "library": [
       "fn_55: (map (lam (index $0 ?#0)) (range ?#1))"
     ],
@@ -487,9 +487,9 @@
     "initial_cost": 473,
     "final_cost": 456,
     "compression_ratio": 1.037280701754386,
-    "elapsed_secs": 0.074019733,
+    "elapsed_secs": 0.076502841,
     "library": [
-      "fn_57: (lam (map (lam (mod $0 (fn_54 ?#0))) $0))"
+      "fn_57: (lam (map (lam (?#0 $0 (?#1 $0))) $0))"
     ],
     "egraph_min_term_size": 474.0
   },
@@ -498,11 +498,11 @@
     "domain": "list",
     "file": "list_hard_test_ellisk_2019-02-15T11.39.19__bench003_it4",
     "initial_cost": 480,
-    "final_cost": 466,
-    "compression_ratio": 1.0300429184549356,
-    "elapsed_secs": 0.053376932,
+    "final_cost": 461,
+    "compression_ratio": 1.0412147505422993,
+    "elapsed_secs": 0.057087322,
     "library": [
-      "fn_59: (lam (map (?#0 $0) $0))"
+      "fn_59: (lam (map (lam (?#0 $0 $0)) $0))"
     ],
     "egraph_min_term_size": 481.0
   },
@@ -513,7 +513,7 @@
     "initial_cost": 559,
     "final_cost": 537,
     "compression_ratio": 1.0409683426443204,
-    "elapsed_secs": 0.054962106,
+    "elapsed_secs": 0.059782959,
     "library": [
       "fn_60: (lam (map (?#0 $0) $0))"
     ],
@@ -526,7 +526,7 @@
     "initial_cost": 570,
     "final_cost": 548,
     "compression_ratio": 1.0401459854014599,
-    "elapsed_secs": 0.039488651,
+    "elapsed_secs": 0.041227132,
     "library": [
       "fn_62: (lam (map (?#0 $0) $0))"
     ],
@@ -539,7 +539,7 @@
     "initial_cost": 614,
     "final_cost": 592,
     "compression_ratio": 1.037162162162162,
-    "elapsed_secs": 0.041393634,
+    "elapsed_secs": 0.040695826,
     "library": [
       "fn_62: (lam (map (?#0 $0) $0))"
     ],
@@ -552,7 +552,7 @@
     "initial_cost": 703,
     "final_cost": 681,
     "compression_ratio": 1.0323054331864905,
-    "elapsed_secs": 0.042193094,
+    "elapsed_secs": 0.047009729,
     "library": [
       "fn_63: (lam (map (?#0 $0) $0))"
     ],
@@ -565,7 +565,7 @@
     "initial_cost": 776,
     "final_cost": 752,
     "compression_ratio": 1.0319148936170213,
-    "elapsed_secs": 0.056013808,
+    "elapsed_secs": 0.061594246,
     "library": [
       "fn_64: (lam (map (?#0 $0) $0))"
     ],
@@ -578,7 +578,7 @@
     "initial_cost": 825,
     "final_cost": 799,
     "compression_ratio": 1.032540675844806,
-    "elapsed_secs": 0.041809675,
+    "elapsed_secs": 0.042381648,
     "library": [
       "fn_65: (lam (map (?#0 $0) $0))"
     ],
@@ -589,11 +589,11 @@
     "domain": "list",
     "file": "list_hard_test_ellisk_2019-02-15T11.39.19__bench010_it11",
     "initial_cost": 782,
-    "final_cost": 761,
-    "compression_ratio": 1.0275952693823915,
-    "elapsed_secs": 0.041296953,
+    "final_cost": 758,
+    "compression_ratio": 1.0316622691292876,
+    "elapsed_secs": 0.040568797,
     "library": [
-      "fn_67: (lam (map (lam (?#0 $1 $0)) $0))"
+      "fn_67: (lam (map (?#0 $0) $0))"
     ],
     "egraph_min_term_size": 783.0
   },
@@ -604,7 +604,7 @@
     "initial_cost": 808,
     "final_cost": 786,
     "compression_ratio": 1.0279898218829517,
-    "elapsed_secs": 0.042951677,
+    "elapsed_secs": 0.043840274,
     "library": [
       "fn_68: (lam (map (?#0 $0) $0))"
     ],
@@ -617,7 +617,7 @@
     "initial_cost": 135,
     "final_cost": 120,
     "compression_ratio": 1.125,
-    "elapsed_secs": 0.043004677,
+    "elapsed_secs": 0.045303188,
     "library": [
       "fn_0: (+ 1 (+ 1 1))"
     ],
@@ -630,7 +630,7 @@
     "initial_cost": 251,
     "final_cost": 242,
     "compression_ratio": 1.037190082644628,
-    "elapsed_secs": 0.040054172,
+    "elapsed_secs": 0.042560243,
     "library": [
       "fn_19: (map (lam (index $0 ?#0)) (range ?#1))"
     ],
@@ -641,11 +641,11 @@
     "domain": "list",
     "file": "list_hard_test_ellisk_2019-02-15T11.43.28__bench002_it2",
     "initial_cost": 303,
-    "final_cost": 288,
-    "compression_ratio": 1.0520833333333333,
-    "elapsed_secs": 0.039202815,
+    "final_cost": 291,
+    "compression_ratio": 1.041237113402062,
+    "elapsed_secs": 0.042839407,
     "library": [
-      "fn_57: (lam (map ?#0 $0))"
+      "fn_57: (lam (map (lam (?#0 $0)) $0))"
     ],
     "egraph_min_term_size": 304.0
   },
@@ -656,7 +656,7 @@
     "initial_cost": 427,
     "final_cost": 412,
     "compression_ratio": 1.0364077669902914,
-    "elapsed_secs": 0.066326263,
+    "elapsed_secs": 0.070083219,
     "library": [
       "fn_57: (cdr (cdr ?#0))"
     ],
@@ -669,7 +669,7 @@
     "initial_cost": 478,
     "final_cost": 465,
     "compression_ratio": 1.027956989247312,
-    "elapsed_secs": 0.064670547,
+    "elapsed_secs": 0.071296124,
     "library": [
       "fn_57: (+ 1)"
     ],
@@ -682,7 +682,7 @@
     "initial_cost": 588,
     "final_cost": 567,
     "compression_ratio": 1.037037037037037,
-    "elapsed_secs": 0.106568066,
+    "elapsed_secs": 0.112449298,
     "library": [
       "fn_69: (+ fn_18)"
     ],
@@ -695,7 +695,7 @@
     "initial_cost": 671,
     "final_cost": 652,
     "compression_ratio": 1.0291411042944785,
-    "elapsed_secs": 0.071282269,
+    "elapsed_secs": 0.073530336,
     "library": [
       "fn_71: (+ ?#0 1)"
     ],
@@ -708,7 +708,7 @@
     "initial_cost": 761,
     "final_cost": 736,
     "compression_ratio": 1.033967391304348,
-    "elapsed_secs": 0.069263793,
+    "elapsed_secs": 0.082165884,
     "library": [
       "fn_72: (+ ?#0 1)"
     ],
@@ -719,11 +719,11 @@
     "domain": "list",
     "file": "list_hard_test_ellisk_2019-02-15T11.43.28__bench008_it8",
     "initial_cost": 831,
-    "final_cost": 803,
-    "compression_ratio": 1.0348692403486923,
-    "elapsed_secs": 0.084512806,
+    "final_cost": 807,
+    "compression_ratio": 1.029739776951673,
+    "elapsed_secs": 0.080863661,
     "library": [
-      "fn_73: (lam (map (lam (?#0 $0 $0)) $0))"
+      "fn_73: (lam (map (?#0 $0) $0))"
     ],
     "egraph_min_term_size": 828.0
   },
@@ -734,7 +734,7 @@
     "initial_cost": 1070,
     "final_cost": 1038,
     "compression_ratio": 1.0308285163776494,
-    "elapsed_secs": 0.083609652,
+    "elapsed_secs": 0.083767518,
     "library": [
       "fn_74: (lam (map (?#0 $0) $0))"
     ],
@@ -747,7 +747,7 @@
     "initial_cost": 1027,
     "final_cost": 999,
     "compression_ratio": 1.028028028028028,
-    "elapsed_secs": 0.077649372,
+    "elapsed_secs": 0.088930773,
     "library": [
       "fn_75: (lam (fn_73 $0 ?#0))"
     ],
@@ -760,7 +760,7 @@
     "initial_cost": 1008,
     "final_cost": 980,
     "compression_ratio": 1.0285714285714285,
-    "elapsed_secs": 0.080184577,
+    "elapsed_secs": 0.089016634,
     "library": [
       "fn_76: (lam (fn_73 $0 (lam (?#0 $0))))"
     ],

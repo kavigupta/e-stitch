@@ -4,11 +4,11 @@
     "domain": "towers",
     "file": "tower_batch_50_3600_ellisk_2019-03-26T10.51.16__bench000_it0",
     "initial_cost": 406,
-    "final_cost": 276,
-    "compression_ratio": 1.4710144927536233,
-    "elapsed_secs": 0.05338116,
+    "final_cost": 299,
+    "compression_ratio": 1.3578595317725752,
+    "elapsed_secs": 0.066579317,
     "library": [
-      "fn_0: (lam (moveHand 3 (reverseHand (tower_loopM ?#0 (lam (lam (moveHand 6 (3x1 $0)))) $0))))"
+      "fn_0: (moveHand 3 (reverseHand (tower_loopM ?#0 (lam (lam (moveHand 6 (3x1 $0)))) ?#1)))"
     ],
     "egraph_min_term_size": null
   },
@@ -19,7 +19,7 @@
     "initial_cost": 672,
     "final_cost": 575,
     "compression_ratio": 1.1686956521739131,
-    "elapsed_secs": 0.059526618,
+    "elapsed_secs": 0.07787254,
     "library": [
       "fn_244: (fn_242 ?#0 (lam (reverseHand $0)))"
     ],
@@ -32,7 +32,7 @@
     "initial_cost": 571,
     "final_cost": 522,
     "compression_ratio": 1.0938697318007662,
-    "elapsed_secs": 0.047680056,
+    "elapsed_secs": 0.048877021,
     "library": [
       "fn_251: (lam (fn_246 ?#0 ?#1 $0))"
     ],
@@ -45,7 +45,7 @@
     "initial_cost": 569,
     "final_cost": 526,
     "compression_ratio": 1.0817490494296578,
-    "elapsed_secs": 0.067818772,
+    "elapsed_secs": 0.067059297,
     "library": [
       "fn_254: (lam (?#0 $0))"
     ],
@@ -56,11 +56,11 @@
     "domain": "towers",
     "file": "tower_batch_50_3600_ellisk_2019-03-26T10.54.52__bench000_it0",
     "initial_cost": 376,
-    "final_cost": 265,
-    "compression_ratio": 1.4188679245283018,
-    "elapsed_secs": 0.058004462,
+    "final_cost": 285,
+    "compression_ratio": 1.3192982456140352,
+    "elapsed_secs": 0.060983029,
     "library": [
-      "fn_0: (lam (moveHand 3 (reverseHand (tower_loopM ?#0 (lam (lam (moveHand 6 (3x1 $0)))) $0))))"
+      "fn_0: (moveHand 3 (reverseHand (tower_loopM ?#0 (lam (lam (moveHand 6 (3x1 $0)))) ?#1)))"
     ],
     "egraph_min_term_size": null
   },
@@ -69,11 +69,11 @@
     "domain": "towers",
     "file": "tower_batch_50_3600_ellisk_2019-03-26T10.54.52__bench001_it1",
     "initial_cost": 679,
-    "final_cost": 574,
-    "compression_ratio": 1.1829268292682926,
-    "elapsed_secs": 0.044539866,
+    "final_cost": 572,
+    "compression_ratio": 1.187062937062937,
+    "elapsed_secs": 0.053860158,
     "library": [
-      "fn_244: (fn_242 (moveHand 4 ?#0) (lam (reverseHand $0)))"
+      "fn_244: (lam (fn_242 (?#0 $0) (lam (reverseHand $0)) ?#1))"
     ],
     "egraph_min_term_size": null
   },
@@ -82,11 +82,11 @@
     "domain": "towers",
     "file": "tower_batch_50_3600_ellisk_2019-03-26T10.54.52__bench002_it2",
     "initial_cost": 579,
-    "final_cost": 538,
-    "compression_ratio": 1.0762081784386617,
-    "elapsed_secs": 0.060815124,
+    "final_cost": 530,
+    "compression_ratio": 1.0924528301886793,
+    "elapsed_secs": 0.063326896,
     "library": [
-      "fn_258: (lam (?#0 $0))"
+      "fn_258: (lam (fn_255 ?#0 ?#1 $0))"
     ],
     "egraph_min_term_size": null
   },
@@ -97,7 +97,7 @@
     "initial_cost": 536,
     "final_cost": 504,
     "compression_ratio": 1.0634920634920635,
-    "elapsed_secs": 0.059484419,
+    "elapsed_secs": 0.068068972,
     "library": [
       "fn_261: (lam (?#0 $0))"
     ],
@@ -108,11 +108,11 @@
     "domain": "towers",
     "file": "tower_batch_50_3600_ellisk_2019-03-26T10.58.24__bench000_it0",
     "initial_cost": 92,
-    "final_cost": 78,
-    "compression_ratio": 1.1794871794871795,
-    "elapsed_secs": 0.041680683,
+    "final_cost": 73,
+    "compression_ratio": 1.2602739726027397,
+    "elapsed_secs": 0.053072301,
     "library": [
-      "fn_0: (lam (lam (reverseHand (tower_embed (lam (moveHand 2 (1x3 $0))) $0))))"
+      "fn_0: (lam (tower_loopM ?#0 (lam (lam (reverseHand (tower_embed (lam (moveHand 2 (1x3 $0))) $0)))) (3x1 $0)))"
     ],
     "egraph_min_term_size": null
   },
@@ -121,11 +121,11 @@
     "domain": "towers",
     "file": "tower_batch_50_3600_ellisk_2019-03-26T10.58.24__bench001_it1",
     "initial_cost": 608,
-    "final_cost": 553,
-    "compression_ratio": 1.0994575045207957,
-    "elapsed_secs": 0.054330311,
+    "final_cost": 548,
+    "compression_ratio": 1.1094890510948905,
+    "elapsed_secs": 0.056982817,
     "library": [
-      "fn_262: (lam (tower_loopM ?#0 ?#1 $0))"
+      "fn_262: (lam (fn_261 (moveHand 6 $0) ?#0))"
     ],
     "egraph_min_term_size": null
   },
@@ -136,7 +136,7 @@
     "initial_cost": 541,
     "final_cost": 510,
     "compression_ratio": 1.0607843137254902,
-    "elapsed_secs": 0.038446527,
+    "elapsed_secs": 0.040181201,
     "library": [
       "fn_267: (lam (?#0 $0))"
     ],
@@ -149,7 +149,7 @@
     "initial_cost": 511,
     "final_cost": 478,
     "compression_ratio": 1.0690376569037656,
-    "elapsed_secs": 0.042209204,
+    "elapsed_secs": 0.043910386,
     "library": [
       "fn_270: (lam (?#0 $0))"
     ],
@@ -162,7 +162,7 @@
     "initial_cost": 376,
     "final_cost": 265,
     "compression_ratio": 1.4188679245283018,
-    "elapsed_secs": 0.05403673,
+    "elapsed_secs": 0.064900779,
     "library": [
       "fn_0: (lam (moveHand 3 (reverseHand (tower_loopM ?#0 (lam (lam (moveHand 6 (3x1 $0)))) $0))))"
     ],
@@ -175,7 +175,7 @@
     "initial_cost": 695,
     "final_cost": 566,
     "compression_ratio": 1.2279151943462898,
-    "elapsed_secs": 0.063801316,
+    "elapsed_secs": 0.073547818,
     "library": [
       "fn_271: (lam (fn_270 (moveHand 4 $0) ?#0 (lam (reverseHand $0))))"
     ],
@@ -188,7 +188,7 @@
     "initial_cost": 626,
     "final_cost": 583,
     "compression_ratio": 1.0737564322469983,
-    "elapsed_secs": 0.066254167,
+    "elapsed_secs": 0.070742166,
     "library": [
       "fn_275: (lam (?#0 $0))"
     ],
@@ -199,11 +199,11 @@
     "domain": "towers",
     "file": "tower_batch_50_3600_ellisk_2019-03-26T11.05.16__bench000_it0",
     "initial_cost": 532,
-    "final_cost": 457,
-    "compression_ratio": 1.1641137855579868,
-    "elapsed_secs": 0.058245545,
+    "final_cost": 435,
+    "compression_ratio": 1.2229885057471264,
+    "elapsed_secs": 0.066958007,
     "library": [
-      "fn_0: (moveHand 3 (reverseHand (tower_loopM ?#0 (lam (lam (moveHand 6 (3x1 $0)))) ?#1)))"
+      "fn_0: (lam (lam (moveHand 3 (reverseHand (tower_loopM ?#0 (lam (lam (moveHand 6 (3x1 $0)))) $0)))))"
     ],
     "egraph_min_term_size": null
   },
@@ -214,7 +214,7 @@
     "initial_cost": 641,
     "final_cost": 592,
     "compression_ratio": 1.0827702702702702,
-    "elapsed_secs": 0.058359438,
+    "elapsed_secs": 0.056186863,
     "library": [
       "fn_279: (lam (tower_loopM ?#0 ?#1 $0))"
     ],
@@ -225,11 +225,11 @@
     "domain": "towers",
     "file": "tower_batch_50_3600_ellisk_2019-03-26T11.05.16__bench002_it2",
     "initial_cost": 528,
-    "final_cost": 489,
-    "compression_ratio": 1.0797546012269938,
-    "elapsed_secs": 0.050308587,
+    "final_cost": 491,
+    "compression_ratio": 1.075356415478615,
+    "elapsed_secs": 0.056037613,
     "library": [
-      "fn_284: (tower_loopM ?#0 (lam (lam (moveHand 6 (tower_embed (lam (reverseHand (fn_276 $2 1 $0))) $0)))))"
+      "fn_284: (lam (lam (moveHand 6 (tower_embed (lam (reverseHand (fn_276 $2 1 $0))) $0))))"
     ],
     "egraph_min_term_size": null
   }

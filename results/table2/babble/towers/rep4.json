@@ -6,7 +6,7 @@
     "initial_cost": 406,
     "final_cost": 278,
     "compression_ratio": 1.460431654676259,
-    "elapsed_secs": 0.05253958702087402,
+    "elapsed_secs": 0.05171513557434082,
     "library": [
       "fn_34: (lam (lam (lam (tower_loopM ($1 $0) (lam (lam (moveHand 3 (reverseHand (tower_loopM ($4 $2 $1 $0) (lam (lam (moveHand 6 (3x1 $0)))) $0))))) $0))))"
     ],
@@ -19,7 +19,7 @@
     "initial_cost": 672,
     "final_cost": 551,
     "compression_ratio": 1.219600725952813,
-    "elapsed_secs": 0.14903521537780762,
+    "elapsed_secs": 0.15115857124328613,
     "library": [
       "fn_34: (lam (lam (lam (tower_loopM ($1 $0) (lam (lam (fn_0 (moveHand 4 $0) (lam (reverseHand $0)) ($4 $2 $1 $0)))) $0))))"
     ],
@@ -32,7 +32,7 @@
     "initial_cost": 571,
     "final_cost": 545,
     "compression_ratio": 1.0477064220183485,
-    "elapsed_secs": 0.20184779167175293,
+    "elapsed_secs": 0.2071213722229004,
     "library": [
       "fn_123: (lam (tower_loopM $0 (lam (lam (tower_embed (lam (fn_2 2 $2 $0)) $0)))))"
     ],
@@ -45,7 +45,7 @@
     "initial_cost": 569,
     "final_cost": 526,
     "compression_ratio": 1.0817490494296578,
-    "elapsed_secs": 0.21555066108703613,
+    "elapsed_secs": 0.22170090675354004,
     "library": [
       "fn_26: (lam (lam (tower_loopM ($1 $0) (lam (lam (moveHand 6 (tower_embed (lam (reverseHand (fn_6 1 2 $2 $0))) $0)))) $0)))"
     ],
@@ -58,7 +58,7 @@
     "initial_cost": 376,
     "final_cost": 269,
     "compression_ratio": 1.3977695167286246,
-    "elapsed_secs": 0.041918277740478516,
+    "elapsed_secs": 0.04349493980407715,
     "library": [
       "fn_99: (lam (lam (tower_loopM $0 (lam (lam (moveHand 3 (reverseHand (tower_loopM ($3 $1 $0) (lam (lam (moveHand 6 (3x1 $0)))) $0))))))))"
     ],
@@ -71,7 +71,7 @@
     "initial_cost": 679,
     "final_cost": 530,
     "compression_ratio": 1.2811320754716982,
-    "elapsed_secs": 0.1385948657989502,
+    "elapsed_secs": 0.14470529556274414,
     "library": [
       "fn_33: (lam (lam (lam (tower_loopM ($1 $0) (lam (lam (fn_0 (moveHand 4 $0) (lam (reverseHand $0)) ($4 $2 $1 $0)))) $0))))"
     ],
@@ -84,7 +84,7 @@
     "initial_cost": 579,
     "final_cost": 553,
     "compression_ratio": 1.047016274864376,
-    "elapsed_secs": 0.20577788352966309,
+    "elapsed_secs": 0.21686148643493652,
     "library": [
       "fn_139: (lam (tower_loopM $0 (lam (lam (tower_embed (lam (fn_2 $2 2 $0)) $0)))))"
     ],
@@ -97,7 +97,7 @@
     "initial_cost": 536,
     "final_cost": 516,
     "compression_ratio": 1.0387596899224807,
-    "elapsed_secs": 0.19646310806274414,
+    "elapsed_secs": 0.20189833641052246,
     "library": [
       "fn_0: (lam (lam (tower_embed (lam (reverseHand (fn_5 $2 1 2 $0))) (moveHand 6 $0))))"
     ],
@@ -110,7 +110,7 @@
     "initial_cost": 92,
     "final_cost": 78,
     "compression_ratio": 1.1794871794871795,
-    "elapsed_secs": 0.0069997310638427734,
+    "elapsed_secs": 0.007082462310791016,
     "library": [
       "fn_3: (lam (lam (tower_loopM ($1 $0) (lam (lam (reverseHand (tower_embed (lam (moveHand 2 (1x3 $0))) $0)))) (3x1 $0))))"
     ],
@@ -123,7 +123,7 @@
     "initial_cost": 608,
     "final_cost": 546,
     "compression_ratio": 1.1135531135531136,
-    "elapsed_secs": 0.1271512508392334,
+    "elapsed_secs": 0.1290576457977295,
     "library": [
       "fn_67: (lam (lam (lam (tower_loopM ($1 $0) (lam (lam (fn_0 (moveHand 6 $0) ($4 $2 $1 $0)))) $0))))"
     ],
@@ -136,7 +136,7 @@
     "initial_cost": 541,
     "final_cost": 530,
     "compression_ratio": 1.0207547169811322,
-    "elapsed_secs": 0.18328356742858887,
+    "elapsed_secs": 0.18289852142333984,
     "library": [
       "fn_2: (lam (lam (fn_1 (reverseHand (fn_4 1 4 $0)))))"
     ],
@@ -149,7 +149,7 @@
     "initial_cost": 511,
     "final_cost": 493,
     "compression_ratio": 1.0365111561866125,
-    "elapsed_secs": 0.18961477279663086,
+    "elapsed_secs": 0.19460415840148926,
     "library": [
       "fn_1: (lam (lam (moveHand 6 (tower_embed (lam (reverseHand (fn_3 $2 3 $0))) $0))))"
     ],
@@ -162,7 +162,7 @@
     "initial_cost": 376,
     "final_cost": 269,
     "compression_ratio": 1.3977695167286246,
-    "elapsed_secs": 0.04746389389038086,
+    "elapsed_secs": 0.046669960021972656,
     "library": [
       "fn_91: (lam (lam (tower_loopM $0 (lam (lam (moveHand 3 (reverseHand (tower_loopM ($3 $1 $0) (lam (lam (moveHand 6 (3x1 $0)))) $0))))))))"
     ],
@@ -175,7 +175,7 @@
     "initial_cost": 695,
     "final_cost": 560,
     "compression_ratio": 1.2410714285714286,
-    "elapsed_secs": 0.17586493492126465,
+    "elapsed_secs": 0.17620277404785156,
     "library": [
       "fn_44: (lam (lam (lam (tower_loopM ($1 $0) (lam (lam (fn_0 (moveHand 4 $0) ($4 $2 $1 $0) (lam (reverseHand $0))))) $0))))"
     ],
@@ -188,7 +188,7 @@
     "initial_cost": 626,
     "final_cost": 585,
     "compression_ratio": 1.07008547008547,
-    "elapsed_secs": 0.2287604808807373,
+    "elapsed_secs": 0.23276662826538086,
     "library": [
       "fn_150: (lam (tower_loopM $0 (lam (lam (tower_embed (lam (fn_1 $2 2 $0)) $0)))))"
     ],
@@ -201,7 +201,7 @@
     "initial_cost": 532,
     "final_cost": 445,
     "compression_ratio": 1.195505617977528,
-    "elapsed_secs": 0.08931827545166016,
+    "elapsed_secs": 0.08993649482727051,
     "library": [
       "fn_153: (lam (lam (tower_loopM $0 (lam (lam (moveHand 3 (reverseHand (tower_loopM ($3 $1 $0) (lam (lam (moveHand 6 (3x1 $0)))) $0))))))))"
     ],
@@ -214,7 +214,7 @@
     "initial_cost": 641,
     "final_cost": 592,
     "compression_ratio": 1.0827702702702702,
-    "elapsed_secs": 0.18394184112548828,
+    "elapsed_secs": 0.18703794479370117,
     "library": [
       "fn_48: (lam (lam (tower_loopM ($1 $0) (lam (lam (fn_0 (moveHand 4 $0) 2))) $0)))"
     ],
@@ -227,7 +227,7 @@
     "initial_cost": 528,
     "final_cost": 489,
     "compression_ratio": 1.0797546012269938,
-    "elapsed_secs": 0.16870617866516113,
+    "elapsed_secs": 0.17165851593017578,
     "library": [
       "fn_19: (lam (lam (tower_loopM ($1 $0) (lam (lam (moveHand 6 (tower_embed (lam (reverseHand (fn_2 $2 1 $0))) $0)))) $0)))"
     ],
