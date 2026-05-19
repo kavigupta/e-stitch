@@ -66,6 +66,10 @@ TABLE_TITLES = {
 }
 # Tables that include an "E-graph min term size" column (runs with DSRs).
 TABLES_WITH_EGRAPH_MIN = {1, 3}
+# DSR tables borrow Stitch numbers from the matching no-DSR table (Stitch
+# doesn't accept DSRs); cells/markers are starred to flag the mismatch.
+NO_DSR_COUNTERPART = {1: 2, 3: 4}
+STITCH_STAR = "$^{\\star}$"
 
 # Plot styling: each method gets a color, each domain a marker. Keeping these
 # as module-level dicts makes it easy to extend with new methods/domains.
@@ -151,14 +155,39 @@ def bold_best(xs: list[float | None], spec: str,
     return out
 
 
+def _stitch_no_dsr_maps(table: int) -> dict[str, tuple[float | None, float | None]]:
+    """``{domain: (cr, time)}`` for Stitch from the matching no-DSR table.
+
+    Returns an empty dict if ``table`` has no counterpart or the JSON is
+    missing — callers treat that as "no starred values to inject."
+    """
+    other = NO_DSR_COUNTERPART.get(table)
+    if other is None:
+        return {}
+    path = RESULTS_DIR / f"table{other}.json"
+    if not path.exists():
+        return {}
+    with open(path) as fh:
+        other_saved = json.load(fh)
+    out: dict[str, tuple[float | None, float | None]] = {}
+    for domain, payload in other_saved.get("domains", {}).items():
+        runs = payload.get("runs", {})
+        cr = aggregate_methods_cr(runs).get(TABLE_DATA_KEYS["stitch"])
+        t = aggregate_methods_time(runs).get(TABLE_DATA_KEYS["stitch"])
+        out[domain] = (cr, t)
+    return out
+
+
 def render(saved: dict, table: int) -> str:
     """Return a LaTeX ``tabular`` string for the given loaded results dict."""
     domains = saved["domains"]
-    # Tables 1 & 3 run with DSRs (which Stitch doesn't accept); show the
-    # Stitch column anyway with N/A so the layout matches Table 2.
+    # Tables 1 & 3 run with DSRs (which Stitch doesn't accept); fill the
+    # Stitch column from the matching no-DSR table and star those cells.
     methods = METHODS
     n = len(methods)
     has_egraph_min = table in TABLES_WITH_EGRAPH_MIN
+    stitch_no_dsr = _stitch_no_dsr_maps(table)
+    stitch_idx = methods.index("stitch")
 
     # Column layout: domain, original size, (egraph-min for DSR tables,) CRs, times.
     extra_col = "r" if has_egraph_min else ""
@@ -206,13 +235,24 @@ def render(saved: dict, table: int) -> str:
         t_map = aggregate_methods_time(runs)
         crs = [cr_map.get(TABLE_DATA_KEYS[m]) for m in methods]
         ts = [t_map.get(TABLE_DATA_KEYS[m]) for m in methods]
+        if domain in stitch_no_dsr:
+            crs[stitch_idx], ts[stitch_idx] = stitch_no_dsr[domain]
         rows.append((label, initial_size_for_domain(runs), egraph_min_for_domain(runs), crs, ts))
 
     def emit(label: str, size_cells: list[str],
              crs: list[float | None], ts: list[float | None]) -> str:
-        """Render one data row with the best CR (max) and time (min) bolded."""
+        """Render one data row with the best CR (max) and time (min) bolded.
+
+        For DSR tables, Stitch cells come from the no-DSR run and get a
+        trailing star to flag the mismatch.
+        """
         cr_strs = bold_best(crs, ".2f", higher_is_better=True)
         t_strs = bold_best(ts, ".3f", higher_is_better=False)
+        if stitch_no_dsr:
+            if crs[stitch_idx] is not None:
+                cr_strs[stitch_idx] += STITCH_STAR
+            if ts[stitch_idx] is not None:
+                t_strs[stitch_idx] += STITCH_STAR
         return " & ".join([label, *size_cells, *cr_strs, *t_strs]) + " \\\\"
 
     for label, original, egraph_min, crs, ts in rows:
@@ -248,12 +288,16 @@ TABLE_SWEEP_POINT: dict[str, int] = {
 }
 
 
-def plot_cr_vs_time(cr_map: dict, t_map: dict, title: str, out_path: Path) -> None:
+def plot_cr_vs_time(cr_map: dict, t_map: dict, title: str, out_path: Path,
+                    stitch_starred: bool = False) -> None:
     """Save a log-log plot of CR vs time given ``method-key -> value`` maps.
 
     Enum and SMC contribute one line each, with one point per swept
     hyperparameter value (``num_steps`` for Enum, ``num_particles`` for
     SMC); babble and stitch contribute single points. Color encodes method.
+    ``stitch_starred`` swaps Stitch's marker to a star and stars its legend
+    label (used on DSR tables where Stitch's number comes from the no-DSR
+    run).
     """
     import matplotlib.pyplot as plt
     from matplotlib.ticker import ScalarFormatter, NullFormatter
@@ -271,7 +315,9 @@ def plot_cr_vs_time(cr_map: dict, t_map: dict, title: str, out_path: Path) -> No
             if cr is None or t is None:
                 continue
             methods_seen.add(method)
-            ax.scatter([cr], [t], color=color, marker="o", s=50, zorder=2)
+            marker = "*" if (method == "stitch" and stitch_starred) else "o"
+            size = 120 if marker == "*" else 50
+            ax.scatter([cr], [t], color=color, marker=marker, s=size, zorder=2)
             continue
         # Sweep method: collect (cr, t, param) tuples, sorted by parameter
         # so the connecting line follows the sweep order.
@@ -313,7 +359,11 @@ def plot_cr_vs_time(cr_map: dict, t_map: dict, title: str, out_path: Path) -> No
         Line2D(
             [], [],
             linestyle="-" if m in SWEEP_FOR_METHOD else "none",
-            marker="o", color=METHOD_COLORS[m], label=METHOD_LABELS[m],
+            marker="*" if (m == "stitch" and stitch_starred) else "o",
+            markersize=12 if (m == "stitch" and stitch_starred) else 6,
+            color=METHOD_COLORS[m],
+            label=(METHOD_LABELS[m] + r"$^{\star}$"
+                   if (m == "stitch" and stitch_starred) else METHOD_LABELS[m]),
         )
         for m in METHODS if m in methods_seen
     ]
@@ -327,11 +377,24 @@ def plot_cr_vs_time(cr_map: dict, t_map: dict, title: str, out_path: Path) -> No
 
 
 def plot_domain(saved: dict, table: int, domain: str, out_path: Path) -> None:
-    """Plot CR vs time for a single domain."""
+    """Plot CR vs time for a single domain.
+
+    On DSR tables, splice in the matching no-DSR Stitch point so readers
+    can see where regular Stitch lands; the marker/legend get a star.
+    """
     runs = saved["domains"][domain].get("runs", {})
+    cr_map = aggregate_methods_cr(runs)
+    t_map = aggregate_methods_time(runs)
+    stitch_no_dsr = _stitch_no_dsr_maps(table)
+    starred = False
+    if domain in stitch_no_dsr:
+        cr, t = stitch_no_dsr[domain]
+        if cr is not None and t is not None:
+            cr_map[TABLE_DATA_KEYS["stitch"]] = cr
+            t_map[TABLE_DATA_KEYS["stitch"]] = t
+            starred = True
     title = f"{TABLE_TITLES[table]}\n{DOMAIN_PLOT_LABELS.get(domain, domain)}"
-    plot_cr_vs_time(aggregate_methods_cr(runs), aggregate_methods_time(runs),
-                    title, out_path)
+    plot_cr_vs_time(cr_map, t_map, title, out_path, stitch_starred=starred)
 
 
 def plot_geomean(saved: dict, table: int, out_path: Path) -> None:
@@ -339,12 +402,23 @@ def plot_geomean(saved: dict, table: int, out_path: Path) -> None:
     domains = [d for d in domains_for_table(table) if d in saved["domains"]]
     per_cr = [aggregate_methods_cr(saved["domains"][d].get("runs", {})) for d in domains]
     per_t = [aggregate_methods_time(saved["domains"][d].get("runs", {})) for d in domains]
+    stitch_no_dsr = _stitch_no_dsr_maps(table)
+    starred = False
+    if stitch_no_dsr:
+        key = TABLE_DATA_KEYS["stitch"]
+        for d, cm, tm in zip(domains, per_cr, per_t):
+            if d in stitch_no_dsr:
+                cr, t = stitch_no_dsr[d]
+                if cr is not None and t is not None:
+                    cm[key] = cr
+                    tm[key] = t
+                    starred = True
     keys = {k for m in per_cr for k in m} | {k for m in per_t for k in m}
     cr_map = {k: geomean_col([m.get(k) for m in per_cr]) for k in keys}
     t_map = {k: geomean_col([m.get(k) for m in per_t]) for k in keys}
     plot_cr_vs_time(cr_map, t_map,
                     f"{TABLE_TITLES[table]}\nGeo. mean across domains",
-                    out_path)
+                    out_path, stitch_starred=starred)
 
 
 def main() -> None:
