@@ -21,6 +21,7 @@ from expts.render_common import (  # noqa: E402
     egraph_min_for_domain,
     initial_size_for_domain,
 )
+from expts.tables import BFS_STEP_SWEEP, SMC_PARTICLE_SWEEP  # noqa: E402
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 RESULTS_DIR = PROJECT_ROOT / "results"
@@ -47,6 +48,16 @@ DOMAIN_LABELS = {
 }
 METHODS = ["enum", "smc", "babble", "stitch"]
 METHOD_LABELS = {"enum": "Enum", "smc": "SMC", "babble": "babble", "stitch": "Stitch"}
+# The single sweep point each base method contributes to the table cells.
+# Plots use the full sweep regardless.
+TABLE_BFS_STEPS = 500
+TABLE_SMC_PARTICLES = 1000
+TABLE_DATA_KEYS = {
+    "enum": f"enum-{TABLE_BFS_STEPS}",
+    "smc": f"smc-{TABLE_SMC_PARTICLES}",
+    "babble": "babble",
+    "stitch": "stitch",
+}
 TABLE_TITLES = {
     1: "Compression Using Rewrites",
     2: "Compression Without Rewrites",
@@ -89,7 +100,6 @@ def line_color(i: int):
 
 # Plot uses a "line" variant of the pastel theme for readability on white.
 METHOD_COLORS = {m: line_color(i) for i, m in enumerate(METHODS)}
-DOMAIN_MARKERS = {"nuts-bolts": "s", "dials": "^", "wheels": "D", "furniture": "v", "list": "P", "physics": "X", "text": "*", "logo": "o", "towers": "p"}
 DOMAIN_PLOT_LABELS = {
     "nuts-bolts": "Nuts & Bolts",
     "dials": "Dials",
@@ -194,8 +204,8 @@ def render(saved: dict, table: int) -> str:
         label = DOMAIN_LABELS.get(domain, domain)
         cr_map = aggregate_methods_cr(runs)
         t_map = aggregate_methods_time(runs)
-        crs = [cr_map.get(m) for m in methods]
-        ts = [t_map.get(m) for m in methods]
+        crs = [cr_map.get(TABLE_DATA_KEYS[m]) for m in methods]
+        ts = [t_map.get(TABLE_DATA_KEYS[m]) for m in methods]
         rows.append((label, initial_size_for_domain(runs), egraph_min_for_domain(runs), crs, ts))
 
     def emit(label: str, size_cells: list[str],
@@ -224,98 +234,117 @@ def render(saved: dict, table: int) -> str:
     return "\n".join(lines)
 
 
-def plot(saved: dict, table: int, out_path: Path) -> None:
-    """Save a log-log scatter of compression ratio vs elapsed time.
+# Sweep map for the two ours-search methods. Other methods (babble, stitch)
+# are single points; sweep methods become lines connecting one point per
+# parameter value.
+SWEEP_FOR_METHOD: dict[str, tuple[int, ...]] = {
+    "enum": BFS_STEP_SWEEP,
+    "smc": SMC_PARTICLE_SWEEP,
+}
+# Sweep value that gets a filled marker (the one shown in the LaTeX table).
+TABLE_SWEEP_POINT: dict[str, int] = {
+    "enum": TABLE_BFS_STEPS,
+    "smc": TABLE_SMC_PARTICLES,
+}
 
-    Each individual run contributes one point; color encodes the method,
-    marker encodes the domain.
+
+def plot_cr_vs_time(cr_map: dict, t_map: dict, title: str, out_path: Path) -> None:
+    """Save a log-log plot of CR vs time given ``method-key -> value`` maps.
+
+    Enum and SMC contribute one line each, with one point per swept
+    hyperparameter value (``num_steps`` for Enum, ``num_particles`` for
+    SMC); babble and stitch contribute single points. Color encodes method.
     """
     import matplotlib.pyplot as plt
+    from matplotlib.ticker import ScalarFormatter, NullFormatter
+    from matplotlib.lines import Line2D
 
     fig, ax = plt.subplots(figsize=(6, 4.5))
-    domains = saved["domains"]
     methods_seen: set[str] = set()
-    # Collect per-method per-domain geomeans so we can also plot a
-    # cross-benchmark geomean for each method.
-    by_method: dict[str, list[tuple[float, float]]] = {m: [] for m in METHODS}
-    for domain in domains_for_table(table):
-        if domain not in domains:
-            continue
-        marker = DOMAIN_MARKERS.get(domain, "x")
-        runs_by_method = domains[domain].get("runs", {})
-        cr_map = aggregate_methods_cr(runs_by_method)
-        t_map = aggregate_methods_time(runs_by_method)
-        for method in METHODS:
+
+    for method in METHODS:
+        color = METHOD_COLORS.get(method, "black")
+        sweep = SWEEP_FOR_METHOD.get(method)
+        if sweep is None:
             cr = cr_map.get(method)
             t = t_map.get(method)
             if cr is None or t is None:
                 continue
             methods_seen.add(method)
-            by_method[method].append((cr, t))
-            ax.scatter(
-                [cr], [t],
-                color=METHOD_COLORS.get(method, "black"),
-                marker=marker,
-                s=25, edgecolors="none",
-            )
-
-    # Cross-benchmark geomean per method, drawn larger with a star marker.
-    for method in METHODS:
-        pts = by_method[method]
+            ax.scatter([cr], [t], color=color, marker="o", s=50, zorder=2)
+            continue
+        # Sweep method: collect (cr, t, param) tuples, sorted by parameter
+        # so the connecting line follows the sweep order.
+        pts: list[tuple[float, float, int]] = []
+        for n in sweep:
+            key = f"{method}-{n}"
+            cr = cr_map.get(key)
+            t = t_map.get(key)
+            if cr is None or t is None:
+                continue
+            pts.append((cr, t, n))
         if not pts:
             continue
-        cr = math.exp(sum(math.log(p[0]) for p in pts) / len(pts))
-        t = math.exp(sum(math.log(p[1]) for p in pts) / len(pts))
-        ax.scatter(
-            [cr], [t],
-            color=METHOD_COLORS.get(method, "black"),
-            marker="o", s=75, edgecolors="none",
-        )
+        methods_seen.add(method)
+        crs = [p[0] for p in pts]
+        ts = [p[1] for p in pts]
+        ax.plot(crs, ts, "-", color=color, linewidth=1.2, zorder=2)
+        table_n = TABLE_SWEEP_POINT[method]
+        for cr, t, n in pts:
+            if n == table_n:
+                ax.scatter([cr], [t], color=color, marker="o", s=50, zorder=3)
+            ax.annotate(str(n), xy=(cr, t), xytext=(3, 3),
+                        textcoords="offset points", fontsize=7, color=color)
 
     ax.set_xscale("log")
     ax.set_yscale("log")
-    # Plain numbers on the log axes (e.g. "1.4", "10") instead of "1.4 × 10^0".
-    # The compression-ratio axis spans less than a decade, so also label minor
-    # ticks (else only "1" would show); the time axis spans several decades so
-    # major-only is plenty.
-    from matplotlib.ticker import ScalarFormatter, NullFormatter
+    # Plain numbers on the log axes; the CR axis can span less than a decade
+    # so label minor ticks too. See the original plot() for the rationale.
     ax.xaxis.set_major_formatter(ScalarFormatter())
     ax.xaxis.set_minor_formatter(ScalarFormatter())
     ax.yaxis.set_major_formatter(ScalarFormatter())
     ax.yaxis.set_minor_formatter(NullFormatter())
     ax.set_xlabel("Compression ratio")
     ax.set_ylabel("Time (s)")
-    ax.set_title(TABLE_TITLES[table])
+    ax.set_title(title)
     ax.grid(True, which="both", linewidth=0.3, alpha=0.5)
 
-    # Two legends: one for method colors, one for domain markers.
-    from matplotlib.lines import Line2D
     method_handles = [
-        Line2D([], [], linestyle="none", marker="o",
-               color=METHOD_COLORS[m], label=METHOD_LABELS[m])
+        Line2D(
+            [], [],
+            linestyle="-" if m in SWEEP_FOR_METHOD else "none",
+            marker="o", color=METHOD_COLORS[m], label=METHOD_LABELS[m],
+        )
         for m in METHODS if m in methods_seen
     ]
-    domain_handles = [
-        Line2D([], [], linestyle="none", marker=DOMAIN_MARKERS[d],
-               color="gray", label=DOMAIN_PLOT_LABELS[d])
-        for d in domains_for_table(table)
-    ]
-    domain_handles.append(
-        Line2D([], [], linestyle="none", marker="o", color="gray",
-               markersize=7, label="Geo. mean")
-    )
-    # Put both legends outside the axes so they don't cover points.
-    leg1 = ax.legend(handles=method_handles, title="Method",
-                     loc="upper left", bbox_to_anchor=(1.02, 1.0),
-                     borderaxespad=0.0)
-    ax.add_artist(leg1)
-    ax.legend(handles=domain_handles, title="Domain",
-              loc="upper left", bbox_to_anchor=(1.02, 0.55),
+    ax.legend(handles=method_handles, title="Method",
+              loc="upper left", bbox_to_anchor=(1.02, 1.0),
               borderaxespad=0.0)
 
     fig.tight_layout()
     fig.savefig(out_path, dpi=300)
     plt.close(fig)
+
+
+def plot_domain(saved: dict, table: int, domain: str, out_path: Path) -> None:
+    """Plot CR vs time for a single domain."""
+    runs = saved["domains"][domain].get("runs", {})
+    title = f"{TABLE_TITLES[table]}\n{DOMAIN_PLOT_LABELS.get(domain, domain)}"
+    plot_cr_vs_time(aggregate_methods_cr(runs), aggregate_methods_time(runs),
+                    title, out_path)
+
+
+def plot_geomean(saved: dict, table: int, out_path: Path) -> None:
+    """Plot CR vs time using geomeans (across the table's domains) per key."""
+    domains = [d for d in domains_for_table(table) if d in saved["domains"]]
+    per_cr = [aggregate_methods_cr(saved["domains"][d].get("runs", {})) for d in domains]
+    per_t = [aggregate_methods_time(saved["domains"][d].get("runs", {})) for d in domains]
+    keys = {k for m in per_cr for k in m} | {k for m in per_t for k in m}
+    cr_map = {k: geomean_col([m.get(k) for m in per_cr]) for k in keys}
+    t_map = {k: geomean_col([m.get(k) for m in per_t]) for k in keys}
+    plot_cr_vs_time(cr_map, t_map,
+                    f"{TABLE_TITLES[table]}\nGeo. mean across domains",
+                    out_path)
 
 
 def main() -> None:
@@ -333,9 +362,21 @@ def main() -> None:
         tex_path = FIGURES_DIR / f"table{table}.tex"
         tex_path.write_text(f"% source: {path}\n" + render(saved, table) + "\n")
         print(f"wrote {tex_path}", file=sys.stderr)
-        plot_path = FIGURES_DIR / f"table{table}.png"
-        plot(saved, table, plot_path)
-        print(f"wrote {plot_path}", file=sys.stderr)
+        # Drop the previous single-PNG-per-table output; the per-domain
+        # files below replace it. Silent if it was already gone.
+        stale = FIGURES_DIR / f"table{table}.png"
+        stale.unlink(missing_ok=True)
+        domain_dir = FIGURES_DIR / f"table{table}"
+        domain_dir.mkdir(exist_ok=True)
+        for domain in domains_for_table(table):
+            if domain not in saved["domains"]:
+                continue
+            plot_path = domain_dir / f"{domain}.png"
+            plot_domain(saved, table, domain, plot_path)
+            print(f"wrote {plot_path}", file=sys.stderr)
+        geomean_path = FIGURES_DIR / f"table{table}_geomean.png"
+        plot_geomean(saved, table, geomean_path)
+        print(f"wrote {geomean_path}", file=sys.stderr)
 
 
 if __name__ == "__main__":

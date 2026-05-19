@@ -32,11 +32,26 @@ TABLE1_DOMAINS = ["nuts-bolts", "dials", "wheels", "furniture", "list", "physics
 # rewrite files (text/logo/towers).
 TABLE2_DOMAINS = TABLE1_DOMAINS + ["text", "logo", "towers"]
 
+# Hyperparameter sweeps for the two ours-search modes. Each value gets its
+# own runner / cache file, labelled ``enum-<num_steps>`` /
+# ``smc-<num_particles>`` so the renderer can group sweep points back into
+# a single line per base method. The table cells still show one canonical
+# point per method (see ``TABLE_BFS_STEPS`` / ``TABLE_SMC_PARTICLES`` in
+# ``scripts/render_tables.py``).
+BFS_STEP_SWEEP: tuple[int, ...] = (200, 500, 1000, 2000, 5000, 10000, 20000, 50000)
+SMC_PARTICLE_SWEEP: tuple[int, ...] = (20, 50, 100, 200, 500, 1000, 2000, 5000)
+
+
+def _sweep_runners() -> tuple[tuple[str, object], ...]:
+    """``(label, runner)`` pairs for every BFS-step and SMC-particle sweep value."""
+    bfs = tuple((f"enum-{n}", OursBf(num_steps=n)) for n in BFS_STEP_SWEEP)
+    smc = tuple((f"smc-{p}", OursSmc(num_particles=p)) for p in SMC_PARTICLE_SWEEP)
+    return bfs + smc
+
+
 # Runner rosters — Table 1/3 share the no-Stitch roster, Table 2/4 share
 # the with-Stitch roster.
-BASE_RUNNERS: tuple[tuple[str, object], ...] = (
-    ("enum", OursBf()),
-    ("smc", OursSmc()),
+BASE_RUNNERS: tuple[tuple[str, object], ...] = _sweep_runners() + (
     ("babble", Babble()),
 )
 RUNNERS_WITH_STITCH: tuple[tuple[str, object], ...] = BASE_RUNNERS + (
