@@ -295,7 +295,7 @@ fn apply_abstraction<F: LanguageFamily, O: StitchOp>(data: shared::SharedData<F,
         egraph.union(x, root_eclass);
     }
     egraph.rebuild();
-    let extractor = egg::Extractor::new(&egraph, egg::AstSize);
+    let extractor = egg::Extractor::new(&egraph, cost::WeightedSize { weights: egraph.analysis.weights });
     let programs_node = egraph[root].nodes.iter().find(|n| n.is_programs_node()).expect("root e-class should contain a `programs` enode");
     let programs: Vec<String> = programs_node.children().iter().map(|&child| <F::Apply<O> as StitchLanguage>::display_recexpr(&extractor.find_best(child).1)).collect();
 
