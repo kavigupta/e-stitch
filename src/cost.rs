@@ -1,8 +1,26 @@
 use crate::lang::{LanguageFamily, StitchDisc, StitchEgraph, StitchLanguage, StitchOp, Weights, enode_fv};
 use crate::pattern::Pattern;
 use crate::search::SearchState;
-use egg::{Id, Language, RecExpr};
+use egg::{CostFunction, Id, Language, RecExpr};
 use rustc_hash::{FxHashMap, FxHashSet};
+
+/// `egg::CostFunction` that mirrors `StitchAnalysis`'s weighted size:
+/// `intrinsic_size(weights) + Σ child costs`. Use this rather than
+/// `egg::AstSize` whenever extracting from a `StitchEgraph` — under
+/// non-uniform `Weights` (e.g. `--sym-var-cost 100`) the AstSize-min term and
+/// the weighted-min term diverge, and any size compared against `data.size`
+/// (which is weighted) needs the extractor to agree.
+pub struct WeightedSize {
+    pub weights: Weights,
+}
+
+impl<L: StitchLanguage> CostFunction<L> for WeightedSize {
+    type Cost = u64;
+    fn cost<C: FnMut(Id) -> Self::Cost>(&mut self, enode: &L, mut costs: C) -> Self::Cost {
+        let intrinsic = enode.discriminant().intrinsic_size(&self.weights) as u64;
+        enode.children().iter().map(|&c| costs(c)).sum::<u64>() + intrinsic
+    }
+}
 
 /// Per-metavar higher-order arity. `ho_arity[k]` is the number of wrap-lams
 /// each captured arg gets at slot `k` — equivalently, the number of distinct
@@ -189,8 +207,8 @@ pub struct CostScratch {
 }
 
 impl CostScratch {
-    /// Builds the scratch space for a given egraph. The egraph's per-eclass AstSize
-    /// is captured into `runner.original` here and reused across all subsequent calls.
+    /// Builds the scratch space for a given egraph. The egraph's per-eclass weighted
+    /// size is captured into `runner.original` here and reused across all subsequent calls.
     pub fn new<L: StitchLanguage>(egraph: &StitchEgraph<L>) -> Self {
         Self {
             runner: RunnerScratch::new(egraph),
@@ -201,8 +219,9 @@ impl CostScratch {
 
 /// Allocations owned by `StitchAnalysisRunner` itself (independent of the analysis).
 /// Two parallel dense vectors indexed by `usize::from(Id)`: `original` holds the
-/// un-rewritten AstSize per eclass (built once at construction), `overrides` is the
-/// working size table that `solve` relaxes downward. Both are sized to `max_id + 1`.
+/// un-rewritten weighted size per eclass (built once at construction), `overrides`
+/// is the working size table that `solve` relaxes downward. Both are sized to
+/// `max_id + 1`.
 pub struct RunnerScratch {
     original: Vec<i64>,
     overrides: Vec<i64>,
@@ -243,7 +262,7 @@ pub trait StitchAnalysis<L: StitchLanguage>: Sized {
     fn best(sizes: &StitchAnalysisRunner<L, Self>, eclass: Id) -> i64;
 }
 
-/// Dense per-eclass size table with a fallback to the unrewritten AstSize
+/// Dense per-eclass size table with a fallback to the unrewritten weighted size
 /// (`egraph[id].data.size`). An entry is set only when the rewritten size beats the default.
 pub struct StitchAnalysisRunner<'a, L: StitchLanguage, A: StitchAnalysis<L>> {
     egraph: &'a StitchEgraph<L>,
@@ -526,7 +545,7 @@ pub(crate) fn wrap_subst_args<F: LanguageFamily, O: StitchOp>(egraph: &mut Stitc
 /// Extracts each program from the rewritten egraph, using `inv_0` where it reduces size.
 pub fn extract_rewritten_programs<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F::Apply<O>>, root: egg::Id, search_state: &SearchState<F, O>) -> Vec<String> {
     let rewritten = build_rewritten_egraph(egraph, search_state);
-    let extractor = egg::Extractor::new(&rewritten, egg::AstSize);
+    let extractor = egg::Extractor::new(&rewritten, WeightedSize { weights: rewritten.analysis.weights });
     rewritten[root].nodes[0]
         .children()
         .iter()
@@ -551,7 +570,7 @@ pub fn recexpr_fv<L: StitchLanguage>(expr: &RecExpr<L>) -> Vec<FxHashSet<i32>> {
 }
 
 /// Asserts that the extracted term's actual syntactic fv matches the egraph
-/// analysis's recorded fv. Under intersection-fv semantics + AstSize
+/// analysis's recorded fv. Under intersection-fv semantics + WeightedSize
 /// extraction, the minimal-size representative is also the fv-minimal one,
 /// so its fv should equal the intersection across reps — i.e. `expected`.
 /// A mismatch in either direction means the assumption "min-size ⇒ min-fv"
