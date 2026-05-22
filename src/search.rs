@@ -108,9 +108,12 @@ pub struct SharedSearchData<F: LanguageFamily, O: StitchOp> {
     /// Root e-class of the corpus (the `(programs ...)` wrapper). Excluded
     /// from the initial match set so patterns can't be rooted there.
     pub root: Id,
-    /// Follow pattern: particles whose pattern isn't a valid prefix get zero
-    /// weight at the resample step.
-    pub follow: Option<RevExpr<F::Apply<OpWithVar<O>>>>,
+    /// Follow target: particles whose pattern isn't a valid prefix get zero
+    /// weight at the resample step. Stored as the parsed surface form; the
+    /// exact-match check in SMC re-serializes candidate states with HO arity
+    /// applied before structurally comparing, since stitch's display adds
+    /// `(?#k $i …)` HO-args that the bare pattern doesn't carry.
+    pub follow: Option<crate::pattern::PatternRecExpr<F, O>>,
     /// Enable slow rewrite check (assert fast == slow computation).
     pub check_slow: bool,
     /// How many times each e-class is used in the fully-expanded corpus tree.

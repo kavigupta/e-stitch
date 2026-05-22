@@ -106,7 +106,10 @@ pub fn smc<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>
         for (i, cost) in costs.iter().enumerate() {
             let cost_to_beat: usize = best_so_far.as_ref().map_or(original_size, |best| best.0);
             let arity = expanded[i].pattern.vars.len();
-            if arity <= max_arity && !(no_zero_arity && arity == 0) && *cost < cost_to_beat && !expanded[i].has_useless_var(&shared) {
+            // In `--follow` mode the prefix filter lets cheaper non-matching
+            // particles through, so skip the prefix-best update — only the
+            // exact-match exit below promotes a particle to `best`.
+            if shared.follow.is_none() && arity <= max_arity && !(no_zero_arity && arity == 0) && *cost < cost_to_beat && !expanded[i].has_useless_var(&shared) {
                 println!("{} {} {}", format!("[iteration {}]", step).yellow().bold(), format!("new best: {}", cost).green().bold(), expanded[i].pattern.to_string().cyan());
                 best_so_far = Some((*cost, expanded[i].clone()));
                 best_found_at = Some(step);
@@ -124,6 +127,21 @@ pub fn smc<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>
 
         if let Some(ref follow) = shared.follow {
             apply_follow_constraint(&expanded, &mut log_weights, follow, &shared, original_size, &costs, verbose);
+            // If any surviving particle is alpha-equivalent to the follow target,
+            // the search has reached the goal — pick the cheapest such particle
+            // and stop. Prefix-survival is noisy; an exact hit is unambiguous.
+            if let Some((i, c)) = (0..expanded.len())
+                .filter(|&i| log_weights[i] > f64::NEG_INFINITY && crate::follow::matches_follow_serialized(&expanded[i], follow, &shared.egraph))
+                .map(|i| (i, costs[i]))
+                .min_by_key(|&(_, c)| c)
+            {
+                println!("{} {} {}", format!("[iteration {}]", step).yellow().bold(), format!("follow exact match: {}", c).green().bold(), expanded[i].pattern.to_string().cyan());
+                best_so_far = Some((c, expanded[i].clone()));
+                best_found_at = Some(step);
+                steps_run = step + 1;
+                log_debug_step(debug, &mut debug_steps, step, &expanded, &costs, &log_weights.iter().map(|&lw| if lw.is_finite() { lw.exp() } else { 0.0 }).collect::<Vec<_>>(), &best_so_far, &[]);
+                break;
+            }
         }
 
         let total_weight = log_weights.iter().copied().fold(f64::NEG_INFINITY, logaddexp);
