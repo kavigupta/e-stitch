@@ -252,7 +252,7 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
 
             let cost_to_beat = best.as_ref().map_or(original_size, |(c, _)| *c);
             let arity = child_state.pattern.vars.len();
-            if arity <= max_arity && !(no_zero_arity && arity == 0) && child_cost < cost_to_beat {
+            if arity <= max_arity && !(no_zero_arity && arity == 0) && child_cost < cost_to_beat && !child_state.has_useless_var(&shared) {
                 let elapsed = search_start.elapsed().as_secs_f64();
                 println!(
                     "{} {} {} {}",

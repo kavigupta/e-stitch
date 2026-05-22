@@ -265,47 +265,46 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
         });
     }
 
-    /// True iff some frozen variable `?#k` (k < frozen_count) is "useless":
-    /// every match's substitution maps `?#k` to the same e-class, and that
-    /// e-class has no above-pattern free DB indices (all `fv < d_k`). Such a
-    /// metavar adds no compression — its arg is invariant across sites, so the
-    /// abstraction could be specialised by inlining the arg.
+    /// True iff metavar `?#k` is "useless": every match's substitution maps
+    /// `?#k` to the same e-class, and that e-class has no above-pattern free
+    /// DB indices (all `fv < d_k`). Such a metavar adds no compression — its
+    /// arg is invariant across sites, so the abstraction could be specialised
+    /// by inlining the arg.
     ///
-    /// Stitch analog: `is_useless_abstract` (argument capture). We require fv
-    /// to lie strictly below `d_k`, which matches stitch's "shifted_id fv is
-    /// empty" check (the shift drops indices `< d_k`).
-    ///
-    /// Returns `false` when `frozen_count` is `None` (rule disabled) or when
-    /// the match set is empty.
-    pub fn is_useless_frozen(&self, shared: &SharedSearchData<F, O>) -> bool {
-        let Some(fc) = self.frozen_count else { return false };
-        for k in 0..fc {
-            let d_k = self.pattern.var_depth[k];
-            let mut first: Option<Id> = None;
-            let mut same = true;
-            'outer: for m in &self.matches {
-                for s in &m.substs {
-                    let id = shared.egraph.find(s.vars[k]);
-                    match first {
-                        None => first = Some(id),
-                        Some(f) if f == id => {}
-                        Some(_) => {
-                            same = false;
-                            break 'outer;
-                        }
-                    }
+    /// Stitch analog: `is_useless_abstract` (argument capture). The fv bound
+    /// matches stitch's "shifted_id fv is empty" check (the shift drops
+    /// indices `< d_k`).
+    fn is_useless_var(&self, k: usize, shared: &SharedSearchData<F, O>) -> bool {
+        let d_k = self.pattern.var_depth[k];
+        let mut first: Option<Id> = None;
+        for m in &self.matches {
+            for s in &m.substs {
+                let id = shared.egraph.find(s.vars[k]);
+                match first {
+                    None => first = Some(id),
+                    Some(f) if f == id => {}
+                    Some(_) => return false,
                 }
             }
-            if !same {
-                continue;
-            }
-            if let Some(id) = first
-                && shared.egraph[id].data.fv.iter().all(|&i| (i as u32) < d_k)
-            {
-                return true;
-            }
         }
-        false
+        first.is_some_and(|id| shared.egraph[id].data.fv.iter().all(|&i| (i as u32) < d_k))
+    }
+
+    /// True iff some frozen variable (k < frozen_count) is useless. Used as a
+    /// search-time pruning rule during enumeration; returns `false` when
+    /// `frozen_count` is `None` (rule disabled) or when the match set is empty.
+    pub fn is_useless_frozen(&self, shared: &SharedSearchData<F, O>) -> bool {
+        let Some(fc) = self.frozen_count else { return false };
+        (0..fc).any(|k| self.is_useless_var(k, shared))
+    }
+
+    /// True iff any metavar in the pattern is useless. Unlike
+    /// `is_useless_frozen`, this checks *all* vars and ignores `frozen_count`
+    /// — used as a hard rejection gate on candidate result patterns so we
+    /// never return an abstraction whose body could be specialised by
+    /// inlining a constant arg.
+    pub fn has_useless_var(&self, shared: &SharedSearchData<F, O>) -> bool {
+        (0..self.pattern.vars.len()).any(|k| self.is_useless_var(k, shared))
     }
 
     /// Creates the initial search state: a single-variable pattern matching every e-class.

@@ -106,7 +106,7 @@ pub fn smc<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>
         for (i, cost) in costs.iter().enumerate() {
             let cost_to_beat: usize = best_so_far.as_ref().map_or(original_size, |best| best.0);
             let arity = expanded[i].pattern.vars.len();
-            if arity <= max_arity && !(no_zero_arity && arity == 0) && *cost < cost_to_beat {
+            if arity <= max_arity && !(no_zero_arity && arity == 0) && *cost < cost_to_beat && !expanded[i].has_useless_var(&shared) {
                 println!("{} {} {}", format!("[iteration {}]", step).yellow().bold(), format!("new best: {}", cost).green().bold(), expanded[i].pattern.to_string().cyan());
                 best_so_far = Some((*cost, expanded[i].clone()));
                 best_found_at = Some(step);

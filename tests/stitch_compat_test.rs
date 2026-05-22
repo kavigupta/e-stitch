@@ -197,10 +197,13 @@ fn fn_name_collision() {
     check_fixture("data/domains/ho-bugs/fn_name_collision.json", &[], true);
 }
 
-/// Diverges from Stitch.jl: Stitch.jl finds the arity-0 body
-/// `(a b c d e f g h (A B C) (A B C) (A B C) (A B C))`; egg-stitch's e-class
-/// equality unifies the four `(A B C)` subterms and picks the arity-1
-/// `(a b c d e f g h #0 #0 #0 #0)` instead.
+/// Stitch.jl finds the arity-0 body
+/// `(a b c d e f g h (A B C) (A B C) (A B C) (A B C))`. Pre-fix, egg-stitch's
+/// e-class equality unified the four `(A B C)` subterms and picked the
+/// arity-1 `(a b c d e f g h #0 #0 #0 #0)` — but that metavar is useless
+/// (every match maps `?#0` to the same closed e-class), so the
+/// `has_useless_var` result gate now rejects it and the arity-0 answer is
+/// returned instead.
 #[test]
 fn cex() {
     check_fixture("data/domains/stitch/cex.json", &[], true);
