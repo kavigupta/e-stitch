@@ -133,7 +133,7 @@ impl<F: LanguageFamily, O: StitchOp> SharedSearchData<F, O> {
 /// child (dominance pruning fired) or a list of `(action, support)` pairs the
 /// caller can sample from. SMC builds children lazily only for sampled actions.
 pub enum SuccessorEnum<F: LanguageFamily, O: StitchOp> {
-    Dominant { action: Action<F::Discriminant<O>>, child: SearchState<F, O>, support: usize },
+    Dominant { child: SearchState<F, O>, support: usize },
     All(Vec<(Action<F::Discriminant<O>>, usize)>),
 }
 
@@ -339,38 +339,18 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
         child
     }
 
-    /// Enumerates every successor state reachable in one `expand` or `reuse` step.
+    /// Returns the enumerable successors of `self`. When dominance pruning
+    /// fires, the single dominant child is built and returned via
+    /// `SuccessorEnum::Dominant`; otherwise `SuccessorEnum::All` lists every
+    /// `(action, support)` pair without building children, so samplers (e.g.
+    /// SMC) skip work for unpicked actions. The caller materialises children
+    /// for `All` via `apply_action`.
     ///
-    /// Reuse candidates are emitted first so the dominance short-circuit can fire:
-    /// when a reuse(i, j) preserves `num_substs` (every subst already had the two
-    /// vars equal), the resulting child match set is identical to the parent's
-    /// modulo the var-merge, so any successor of the parent is reachable via this
-    /// reuse — we can return it as the *only* successor and skip enumerating the
-    /// rest. Disabled by `--no-opt-dominance-reuse`.
-    ///
-    /// Thin wrapper over `enumerate_successor_actions` that materialises every
-    /// successor's child state up front. Best-first needs all children to push
-    /// into the search frontier; SMC uses the lazy variant directly so it only
-    /// builds children for the actions it actually samples.
-    #[allow(clippy::type_complexity)]
-    pub fn enumerate_successors(&self, shared: &SharedSearchData<F, O>, opt_dominance_reuse: bool, dominance_hits: &mut usize) -> Vec<(Action<F::Discriminant<O>>, SearchState<F, O>, usize)> {
-        match self.enumerate_successor_actions(shared, opt_dominance_reuse, dominance_hits) {
-            SuccessorEnum::Dominant { action, child, support } => vec![(action, child, support)],
-            SuccessorEnum::All(actions) => actions
-                .into_iter()
-                .map(|(a, support)| {
-                    let child = self.apply_action(&a, shared);
-                    (a, child, support)
-                })
-                .collect(),
-        }
-    }
-
-    /// Lazy variant of `enumerate_successors`: returns `(action, support)` pairs
-    /// without building children, so samplers (e.g. SMC) skip work for unpicked
-    /// actions. The caller materialises children via `apply_action`. When
-    /// dominance pruning fires, the single dominant child is built and returned
-    /// via `SuccessorEnum::Dominant`, matching the eager method's short-circuit.
+    /// Expand actions are filtered against best-first's canonical-ordering
+    /// rule: any `var_idx < self.frozen_count` or `var_idx > max_arity` is
+    /// skipped before the action is even constructed. SMC passes
+    /// `max_arity = usize::MAX` and starts with `frozen_count = None`, so the
+    /// filter is a no-op for it.
     ///
     /// `support` is the (m,s)-pair count feeding the SMC weighting; it equals
     /// the surviving subst count, so `support > 0` ⇒ non-empty child.
@@ -380,7 +360,7 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
     /// `support > 0`; `subset_matches` then guarantees the child's match set is
     /// non-empty.
     #[allow(clippy::type_complexity)]
-    pub fn enumerate_successor_actions(&self, shared: &SharedSearchData<F, O>, opt_dominance_reuse: bool, dominance_hits: &mut usize) -> SuccessorEnum<F, O> {
+    pub fn enumerate_successor_actions(&self, shared: &SharedSearchData<F, O>, opt_dominance_reuse: bool, max_arity: usize, dominance_hits: &mut usize) -> SuccessorEnum<F, O> {
         let mut out: Vec<(Action<F::Discriminant<O>>, usize)> = Vec::new();
         let n = self.pattern.vars.len();
         // Weight each (match, subst) contribution by how often that match's
@@ -402,17 +382,28 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
                 if support == 0 {
                     continue;
                 }
-                let action = Action::Reuse { keep: i, drop: j };
                 if opt_dominance_reuse && raw_count == self.num_substs {
                     *dominance_hits += 1;
                     let mut child = self.clone();
                     child.reuse(i, j, shared);
-                    return SuccessorEnum::Dominant { action, child, support };
+                    return SuccessorEnum::Dominant { child, support };
                 }
-                out.push((action, support));
+                out.push((Action::Reuse { keep: i, drop: j }, support));
             }
         }
         for var_idx in 0..n {
+            // Freezing rule: expanding `?#k` commits to never expanding any
+            // `?#j` with j < k; `max_arity` caps how many vars best-first will
+            // create. Both checks are no-ops for SMC (frozen_count = None,
+            // max_arity = usize::MAX).
+            if var_idx > max_arity {
+                continue;
+            }
+            if let Some(fc) = self.frozen_count
+                && var_idx < fc
+            {
+                continue;
+            }
             let d_k = self.pattern.var_depth[var_idx];
             let cross_depth = self.pattern.var_cross_depth[var_idx];
             let mut shape_idx: FxHashMap<(F::Discriminant<O>, usize), usize> = FxHashMap::default();

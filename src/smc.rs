@@ -75,7 +75,7 @@ pub fn smc<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>
         let mut mults: Vec<usize> = Vec::new();
         let mut dedup: FxHashMap<RevExpr<F::Apply<OpWithVar<O>>>, usize> = FxHashMap::default();
         for (state, mult) in particles.drain(..) {
-            let actions = match state.enumerate_successor_actions(&shared, args.opt_dominance_reuse, &mut dominance_hits) {
+            let actions = match state.enumerate_successor_actions(&shared, args.opt_dominance_reuse, usize::MAX, &mut dominance_hits) {
                 SuccessorEnum::Dominant { child, .. } => {
                     dedup_insert(child, mult, &mut expanded, &mut mults, &mut dedup);
                     continue;
