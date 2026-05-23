@@ -73,6 +73,28 @@ pub fn compute_variable_indices<F: LanguageFamily, O: StitchOp>(egraph: &StitchE
         .collect()
 }
 
+/// A candidate `variable_indices` tuple together with the set of substs
+/// (per match) it permits. A subst is "compatible" iff its per-slot fv
+/// `R^k` is a subset of the candidate's `S_k` for every slot — only those
+/// substs can be rewritten via the abstraction, since `wrap_subst_args`
+/// would otherwise hit a fv it can't permute onto a wrap-lam slot.
+///
+/// Today every caller constructs the "all-fv-captured, all-substs-kept"
+/// canonical candidate (`variable_indices = compute_variable_indices(...)`,
+/// `kept_substs = None`), so behavior is unchanged from the pre-refactor
+/// single-tuple cost model. The struct exists so a future optimiser can
+/// enumerate alternative candidates and pick the cheapest.
+#[derive(Debug, Clone)]
+pub struct CostCandidate {
+    pub variable_indices: Vec<Vec<i32>>,
+    /// Per-match selection of compatible subst indices into `matches[i].substs`.
+    /// `None` is the "all substs kept" sentinel — avoids allocating the dense
+    /// `(0..len)` list for the common fast-path candidate. `Some(v)` lists the
+    /// kept indices explicitly, and `v[i]` empty means match `i` contributes
+    /// no rewrite.
+    pub kept_substs: Option<Vec<Vec<usize>>>,
+}
+
 /// Build a copy of `eclass` in `egraph` with every free DB leaf permuted onto
 /// wrap-lam slots in preparation for the call-site β at `?#k`. For each free
 /// `$n` at recursion depth `initial_depth` (so its index relative to our root
@@ -200,7 +222,7 @@ impl CostCache {
 }
 
 /// Reusable allocations for repeated cost computations. Build once with `new(egraph)`
-/// and pass `&mut` to `compute_cost` / `compute_size` to avoid reallocating across calls.
+/// and pass `&mut` to `compute_cost` / `compute_size_for_candidate` to avoid reallocating across calls.
 pub struct CostScratch {
     pub runner: RunnerScratch,
     pub rewrite: RewriteScratch,
@@ -365,6 +387,10 @@ pub struct RewriteAnalysis<'a, F: LanguageFamily, O: StitchOp> {
     pub search_state: &'a SearchState<F, O>,
     pub eclass_to_match_idx: &'a FxHashMap<Id, usize>,
     pub ho_arity: &'a [u32],
+    /// Per-match list of compatible subst indices. `None` is the
+    /// "all-substs-kept" sentinel and matches today's behavior; `Some(k)`
+    /// restricts the rewrite consideration at match `i` to `k[i]`.
+    pub kept_substs: Option<&'a [Vec<usize>]>,
 }
 
 impl<'a, F: LanguageFamily, O: StitchOp> StitchAnalysis<F::Apply<O>> for RewriteAnalysis<'a, F, O> {
@@ -376,25 +402,26 @@ impl<'a, F: LanguageFamily, O: StitchOp> StitchAnalysis<F::Apply<O>> for Rewrite
             let substs = &sizes.analysis.search_state.matches[i].substs;
             let weights = sizes.weights();
             let ho_arity = sizes.analysis.ho_arity;
-            if let Some(rewrite_size) = substs
-                .iter()
-                .map(|subst| {
-                    let stub_size = F::stub_application_size::<O>("inv_0", subst.vars.len(), weights) as i64;
-                    let args_size: i64 = subst
-                        .vars
-                        .iter()
-                        .enumerate()
-                        .map(|(k, &v)| {
-                            let h = ho_arity[k];
-                            let wrap = if h > 0 { F::lams_cost(h, weights) as i64 } else { 0 };
-                            wrap + sizes.get(v)
-                        })
-                        .sum();
-                    stub_size + args_size
-                })
-                .min()
-            {
-                best = best.min(rewrite_size);
+            let cost_of = |subst: &crate::matching::Subst| -> i64 {
+                let stub_size = F::stub_application_size::<O>("inv_0", subst.vars.len(), weights) as i64;
+                let args_size: i64 = subst
+                    .vars
+                    .iter()
+                    .enumerate()
+                    .map(|(k, &v)| {
+                        let h = ho_arity[k];
+                        let wrap = if h > 0 { F::lams_cost(h, weights) as i64 } else { 0 };
+                        wrap + sizes.get(v)
+                    })
+                    .sum();
+                stub_size + args_size
+            };
+            let rewrite_size = match sizes.analysis.kept_substs {
+                Some(k) => k[i].iter().map(|&si| cost_of(&substs[si])).min(),
+                None => substs.iter().map(cost_of).min(),
+            };
+            if let Some(rs) = rewrite_size {
+                best = best.min(rs);
             }
         }
         best
@@ -406,10 +433,21 @@ impl<'a, F: LanguageFamily, O: StitchOp> StitchAnalysis<F::Apply<O>> for Rewrite
 /// applied to the enclosing binders (`(@ … (@ ?#k $0) … $h-1)`), which adds
 /// `h * (app_cost + sym_var_cost)` per occurrence.
 pub fn compute_cost<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F::Apply<O>>, root: egg::Id, cache: &CostCache, scratch: &mut CostScratch, search_state: &SearchState<F, O>, check_slow: bool) -> usize {
-    let ho_arity = compute_ho_arity::<F, O>(egraph, search_state);
-    let cost = compute_size(egraph, root, cache, scratch, search_state, check_slow, &ho_arity);
+    let candidate = canonical_candidate::<F, O>(egraph, search_state);
+    let ho_arity: Vec<u32> = candidate.variable_indices.iter().map(|v| v.len() as u32).collect();
+    let cost = compute_size_for_candidate(egraph, root, cache, scratch, search_state, check_slow, &candidate);
     let body_size = compute_body_size_with_ho::<F, O>(&search_state.pattern, &ho_arity, &egraph.analysis.weights);
     cost + body_size
+}
+
+/// The "all-fv-captured, all-substs-kept" canonical candidate — matches the
+/// pre-refactor behavior of `compute_size` and `apply_abstraction`. Future
+/// optimisers can enumerate alternatives; today every entry point uses this.
+pub fn canonical_candidate<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F::Apply<O>>, search_state: &SearchState<F, O>) -> CostCandidate {
+    CostCandidate {
+        variable_indices: compute_variable_indices::<F, O>(egraph, search_state),
+        kept_substs: None,
+    }
 }
 
 /// Size of the abstraction's pattern body — the pattern AST counted under
@@ -451,22 +489,31 @@ pub fn compute_recexpr_size<L: StitchLanguage>(rec_expr: &RecExpr<L>, ptr: Id, w
 ///
 /// Drives a `StitchAnalysisRunner` to fixed point. Match-root eclasses seed the
 /// dirty set; as their sizes improve, parents are re-dirtied and reconsidered.
-pub fn compute_size<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F::Apply<O>>, root: Id, cache: &CostCache, scratch: &mut CostScratch, search_state: &SearchState<F, O>, check_slow: bool, ho_arity: &[u32]) -> usize {
+pub fn compute_size_for_candidate<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F::Apply<O>>, root: Id, cache: &CostCache, scratch: &mut CostScratch, search_state: &SearchState<F, O>, check_slow: bool, candidate: &CostCandidate) -> usize {
     scratch.rewrite.fill(search_state);
+    let ho_arity: Vec<u32> = candidate.variable_indices.iter().map(|v| v.len() as u32).collect();
     let analysis = RewriteAnalysis {
         search_state,
         eclass_to_match_idx: &scratch.rewrite.eclass_to_match_idx,
-        ho_arity,
+        ho_arity: &ho_arity,
+        kept_substs: candidate.kept_substs.as_deref(),
     };
     let mut sizes = StitchAnalysisRunner::new(egraph, cache, &mut scratch.runner, analysis);
-    for m in &search_state.matches {
+    for (i, m) in search_state.matches.iter().enumerate() {
+        // With the `None` sentinel every match keeps every subst; otherwise
+        // skip seeding matches whose kept list is empty (they don't rewrite).
+        if let Some(k) = &candidate.kept_substs
+            && k[i].is_empty()
+        {
+            continue;
+        }
         sizes.mark_dirty(m.root_eclass);
     }
     sizes.solve();
     let final_size = sizes.get(root);
     if check_slow {
         let data = crate::shared::SharedData::new(egraph.clone(), root);
-        let (rewritten, _programs) = crate::apply_abstraction::<F, O>(data, search_state, "inv_0", None);
+        let (rewritten, _programs) = crate::apply_abstraction::<F, O>(data, search_state, candidate, "inv_0", None);
         let slow_size = rewritten.egraph[rewritten.root].data.size as i64;
         F::check_fast_vs_slow(final_size, slow_size);
         // Semantic guard: rewriting must preserve the free-variable set at the
