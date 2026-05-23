@@ -248,6 +248,7 @@ fn action_weights_with_reuse_boost<D>(actions: &[(Action<D>, usize)], boost_reus
 /// last index to defend against float round-off leaving the final
 /// accumulator slightly below 1.0.
 pub fn index_from_cumulative(acc_weights: &[f64], r: f64) -> usize {
+    assert!(!acc_weights.is_empty(), "index_from_cumulative requires a non-empty slice");
     let idx = acc_weights.partition_point(|&w| w <= r);
     idx.min(acc_weights.len() - 1)
 }
@@ -260,6 +261,7 @@ pub fn weighted_choice(acc_weights: &[f64], rng: &mut StdRng) -> usize {
 
 /// Normalizes weights in-place and returns a separate cumulative distribution.
 pub fn normalize_and_accumulate(weights: &mut [f64]) -> Vec<f64> {
+    assert!(!weights.is_empty(), "normalize_and_accumulate requires a non-empty slice");
     let weight_sum = weights.iter().sum::<f64>();
     if weight_sum == 0.0 {
         let len = weights.len();
