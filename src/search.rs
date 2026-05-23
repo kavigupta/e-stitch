@@ -438,10 +438,20 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
         // eclass used thousands of times looks like the same support as one
         // that fires on thousands of distinct one-off eclasses.
         let usage = |root: Id| shared.usage_counts.get(&root).copied().unwrap_or(1);
+        // `var_reusable` is a best-first canonical-ordering device, mirroring
+        // `frozen_count`. SMC (frozen_count = None) ignores it so its reuse
+        // exploration stays unrestricted. We only enforce it on *same-depth*
+        // reuse pairs — cross-depth reuse inherently requires an intervening
+        // expansion (the depth difference is *created* by expansion), so the
+        // reuse-before-expand canonical order can't apply to it.
+        let enforce_reusable = self.frozen_count.is_some();
         for i in 0..n {
             for j in (i + 1)..n {
                 let di = self.pattern.var_depth[i];
                 let dj = self.pattern.var_depth[j];
+                if enforce_reusable && di == dj && !self.pattern.var_reusable[i] && !self.pattern.var_reusable[j] {
+                    continue;
+                }
                 let (support, raw_count): (usize, usize) = self.matches.iter().fold((0, 0), |(s, r), m| {
                     let c = m.substs.iter().filter(|s| shift_equal(s.vars[i], s.vars[j], di, dj, &shared.egraph)).count();
                     (s + usage(m.root_eclass) * c, r + c)
