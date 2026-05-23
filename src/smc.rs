@@ -55,6 +55,13 @@ pub fn smc<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>
 
     let mut best_so_far: Option<(usize, SearchState<F, O>)> = None;
     let mut best_found_at = None;
+    // In --follow mode, the `new best` update is gated off (the prefix filter
+    // lets cheaper non-matching particles through), so `best_found_at` would
+    // otherwise stay None until the exact-match exit fires — and the
+    // dead-runs check would kill long-running follow searches prematurely.
+    // Track prefix progress (max RecExpr node count among prefix-passing
+    // particles) and bump `best_found_at` when it grows.
+    let mut best_prefix_progress: usize = 0;
     let mut steps_run = 0;
     let debug = args.debug_log;
     let mut debug_steps: Vec<StepLog> = Vec::new();
@@ -119,14 +126,17 @@ pub fn smc<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>
         // log-space weights: logw_i = -cost_i / temperature
         let mut log_weights: Vec<f64> = costs.iter().map(|c| -(*c as f64) / temperature).collect();
 
-        for (i, s) in expanded.iter().enumerate() {
-            if s.pattern.vars.is_empty() {
-                log_weights[i] = f64::NEG_INFINITY;
-            }
-        }
-
         if let Some(ref follow) = shared.follow {
             apply_follow_constraint(&expanded, &mut log_weights, follow, &shared, original_size, &costs, verbose);
+            // Prefix progress: a deeper RecExpr means the particle has expanded
+            // further into the follow target's shape. When this grows, count it
+            // as improvement so the dead-runs check doesn't abort searches that
+            // are making progress but haven't yet reached exact match.
+            let step_progress: usize = (0..expanded.len()).filter(|&i| log_weights[i] > f64::NEG_INFINITY).map(|i| expanded[i].pattern.pattern.nodes.len()).max().unwrap_or(0);
+            if step_progress > best_prefix_progress {
+                best_prefix_progress = step_progress;
+                best_found_at = Some(step);
+            }
             // If any surviving particle is alpha-equivalent to the follow target,
             // the search has reached the goal — pick the cheapest such particle
             // and stop. Prefix-survival is noisy; an exact hit is unambiguous.
@@ -141,6 +151,12 @@ pub fn smc<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>
                 steps_run = step + 1;
                 log_debug_step(debug, &mut debug_steps, step, &expanded, &costs, &log_weights.iter().map(|&lw| if lw.is_finite() { lw.exp() } else { 0.0 }).collect::<Vec<_>>(), &best_so_far, &[]);
                 break;
+            }
+        }
+
+        for (i, s) in expanded.iter().enumerate() {
+            if s.pattern.vars.is_empty() {
+                log_weights[i] = f64::NEG_INFINITY;
             }
         }
 
