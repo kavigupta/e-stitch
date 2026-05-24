@@ -4,6 +4,7 @@ use crate::cost::{CostScratch, compute_cost};
 use crate::debug_log::{DebugLog, StepLog, build_particle_logs, log_debug_step};
 use crate::lang::{LanguageFamily, OpWithVar, StitchOp};
 use crate::logging::{apply_follow_constraint, print_top_particles};
+use crate::lower_bound::{LowerBoundPruner, PruneResult};
 use crate::math::logaddexp;
 use crate::revexpr::RevExpr;
 use crate::search::{Action, SearchState, SuccessorEnum, setup_search};
@@ -70,6 +71,7 @@ pub fn smc<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>
     let mut scratch = CostScratch::new(&shared.egraph);
     let mut dominance_hits: usize = 0;
     let mut useless_inline_hits: usize = 0;
+    let mut lower_bound_pruner = LowerBoundPruner::new(args.opt_lower_bound);
 
     for step in 0..num_steps {
         // For each (state, mult) group, enumerate successor *actions* (no child
@@ -109,23 +111,35 @@ pub fn smc<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>
         }
         drop(dedup);
 
-        let costs: Vec<usize> = expanded.iter().map(|s| compute_cost(&shared.egraph, shared.root, &cost_cache, &mut scratch, s, shared.check_slow)).collect();
-
-        for (i, cost) in costs.iter().enumerate() {
+        // Per-particle: optional lower-bound prune, else full cost; running
+        // `best_so_far` update inline so later particles in the same step can
+        // benefit from a tighter `cost_to_beat`.
+        let mut costs: Vec<usize> = Vec::with_capacity(expanded.len());
+        let mut pruned: Vec<bool> = Vec::with_capacity(expanded.len());
+        for s in expanded.iter() {
             let cost_to_beat: usize = best_so_far.as_ref().map_or(original_size, |best| best.0);
-            let arity = expanded[i].pattern.vars.len();
+            if let PruneResult::Pruned = lower_bound_pruner.try_prune(&shared.egraph, shared.root, &cost_cache, &mut scratch, s, cost_to_beat) {
+                costs.push(cost_to_beat);
+                pruned.push(true);
+                continue;
+            }
+            let cost = compute_cost(&shared.egraph, shared.root, &cost_cache, &mut scratch, s, shared.check_slow);
+            let arity = s.pattern.vars.len();
             // In `--follow` mode the prefix filter lets cheaper non-matching
             // particles through, so skip the prefix-best update — only the
             // exact-match exit below promotes a particle to `best`.
-            if shared.follow.is_none() && arity <= max_arity && !(no_zero_arity && arity == 0) && *cost < cost_to_beat && !expanded[i].has_useless_var(&shared) {
-                println!("{} {} {}", format!("[iteration {}]", step).yellow().bold(), format!("new best: {}", cost).green().bold(), expanded[i].pattern.to_string().cyan());
-                best_so_far = Some((*cost, expanded[i].clone()));
+            if shared.follow.is_none() && arity <= max_arity && !(no_zero_arity && arity == 0) && cost < cost_to_beat && !s.has_useless_var(&shared) {
+                println!("{} {} {}", format!("[iteration {}]", step).yellow().bold(), format!("new best: {}", cost).green().bold(), s.pattern.to_string().cyan());
+                best_so_far = Some((cost, s.clone()));
                 best_found_at = Some(step);
             }
+            costs.push(cost);
+            pruned.push(false);
         }
 
-        // log-space weights: logw_i = -cost_i / temperature
-        let mut log_weights: Vec<f64> = costs.iter().map(|c| -(*c as f64) / temperature).collect();
+        // log-space weights: logw_i = -cost_i / temperature; pruned particles
+        // (lb >= best) are dead since no descendant can beat the current best.
+        let mut log_weights: Vec<f64> = costs.iter().enumerate().map(|(i, c)| if pruned[i] { f64::NEG_INFINITY } else { -(*c as f64) / temperature }).collect();
 
         if let Some(ref follow) = shared.follow {
             apply_follow_constraint(&expanded, &mut log_weights, follow, &shared, original_size, &costs, verbose);
@@ -217,6 +231,7 @@ pub fn smc<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>
     println!("\n{}", "═══ STATS ═══".blue().bold());
     println!("{} {}", "dominance hits:".dimmed(), dominance_hits.to_string().bold());
     println!("{} {}", "useless-inline hits:".dimmed(), useless_inline_hits.to_string().bold());
+    lower_bound_pruner.print_stats();
 
     println!("\n{}", "═══ RESULT ═══".green().bold());
     if let (Some(iter), Some((cost, state))) = (best_found_at, best_so_far.as_ref()) {

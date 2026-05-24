@@ -5,6 +5,7 @@ pub mod follow;
 pub mod io;
 pub mod lang;
 pub mod logging;
+pub mod lower_bound;
 pub mod matching;
 pub mod math;
 pub mod pattern;
