@@ -471,13 +471,21 @@ pub fn compute_pattern_size<F: LanguageFamily, O: StitchOp>(pattern: &Pattern<F,
 /// constructions, making the same final pattern cost less depending on the
 /// action sequence that built it.
 pub fn compute_body_size_with_ho<F: LanguageFamily, O: StitchOp>(pattern: &Pattern<F, O>, ho_arity: &[u32], weights: &Weights) -> usize {
-    let pattern_size = compute_pattern_size::<F, O>(pattern, weights);
+    compute_pattern_size::<F, O>(pattern, weights) + compute_body_size_ho_overhead::<F, O>(pattern, ho_arity, weights)
+}
+
+/// Extra body cost from η-wrapping HO metavar occurrences: for each `?#k`
+/// with `ho_arity[k] = h > 0`, every syntactic occurrence pays
+/// `h * (app_cost + sym_var_cost)` for the `(@ … (@ ?#k $0) … $(h-1))` wrapper.
+/// Uses `pattern.var_occurrences[k]` for occurrence counts — see
+/// [`compute_body_size_with_ho`] for why that's not `vars[k].len()`.
+pub fn compute_body_size_ho_overhead<F: LanguageFamily, O: StitchOp>(pattern: &Pattern<F, O>, ho_arity: &[u32], weights: &Weights) -> usize {
     if ho_arity.iter().all(|&h| h == 0) {
-        return pattern_size;
+        return 0;
     }
     let per_app = weights.app_cost + weights.sym_var_cost;
     let ho_extra: u32 = (0..pattern.vars.len()).map(|k| pattern.var_occurrences[k] as u32 * ho_arity[k] * per_app).sum();
-    pattern_size + ho_extra as usize
+    ho_extra as usize
 }
 
 pub fn compute_recexpr_size<L: StitchLanguage>(rec_expr: &RecExpr<L>, ptr: Id, weights: &Weights) -> usize {
