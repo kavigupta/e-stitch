@@ -1,6 +1,6 @@
 use colored::Colorize;
 
-use crate::cost::{CostScratch, compute_cost};
+use crate::cost::{CostScratch, SearchStateWithCostSelection, compute_cost_and_select};
 use crate::debug_log::{DebugLog, StepLog, build_particle_logs, log_debug_step};
 use crate::lang::{LanguageFamily, OpWithVar, StitchOp};
 use crate::logging::{apply_follow_constraint, print_top_particles};
@@ -28,7 +28,10 @@ fn dedup_insert<F: LanguageFamily, O: StitchOp>(s: SearchState<F, O>, count: usi
 
 /// Output of a completed SMC run.
 pub struct SmcResult<F: LanguageFamily, O: StitchOp> {
-    pub best: Option<(usize, SearchState<F, O>)>,
+    /// `(cost, winning state + the cost selection the optimiser picked for it)`.
+    /// Threading the selection out saves `multiple_step_search` from re-running
+    /// `compute_cost_and_select` just to recover it.
+    pub best: Option<(usize, SearchStateWithCostSelection<F, O>)>,
     pub original_size: usize,
     pub best_found_at: Option<usize>,
     pub num_steps_run: usize,
@@ -54,7 +57,7 @@ pub fn smc<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>
     let no_zero_arity = args.no_zero_arity;
     let verbose = args.verbose;
 
-    let mut best_so_far: Option<(usize, SearchState<F, O>)> = None;
+    let mut best_so_far: Option<(usize, SearchStateWithCostSelection<F, O>)> = None;
     let mut best_found_at = None;
     // In --follow mode, the `new best` update is gated off (the prefix filter
     // lets cheaper non-matching particles through), so `best_found_at` would
@@ -123,14 +126,15 @@ pub fn smc<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>
                 pruned.push(true);
                 continue;
             }
-            let cost = compute_cost(&shared.egraph, shared.root, &cost_cache, &mut scratch, s, shared.check_slow);
+            let selection = compute_cost_and_select(&shared.egraph, shared.root, &cost_cache, &mut scratch, s, shared.check_slow);
+            let cost = selection.cost;
             let arity = s.pattern.vars.len();
             // In `--follow` mode the prefix filter lets cheaper non-matching
             // particles through, so skip the prefix-best update — only the
             // exact-match exit below promotes a particle to `best`.
             if shared.follow.is_none() && arity <= max_arity && !(no_zero_arity && arity == 0) && cost < cost_to_beat && !s.has_useless_var(&shared) {
                 println!("{} {} {}", format!("[iteration {}]", step).yellow().bold(), format!("new best: {}", cost).green().bold(), s.pattern.to_string().cyan());
-                best_so_far = Some((cost, s.clone()));
+                best_so_far = Some((cost, SearchStateWithCostSelection { state: s.clone(), selection }));
                 best_found_at = Some(step);
             }
             costs.push(cost);
@@ -161,7 +165,10 @@ pub fn smc<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>
                 .min_by_key(|&(_, c)| c)
             {
                 println!("{} {} {}", format!("[iteration {}]", step).yellow().bold(), format!("follow exact match: {}", c).green().bold(), expanded[i].pattern.to_string().cyan());
-                best_so_far = Some((c, expanded[i].clone()));
+                // Re-derive the selection for this particle: we didn't keep
+                // selections in `costs`, and exact-match fires at most once.
+                let selection = compute_cost_and_select(&shared.egraph, shared.root, &cost_cache, &mut scratch, &expanded[i], shared.check_slow);
+                best_so_far = Some((c, SearchStateWithCostSelection { state: expanded[i].clone(), selection }));
                 best_found_at = Some(step);
                 steps_run = step + 1;
                 log_debug_step(debug, &mut debug_steps, step, &expanded, &costs, &log_weights.iter().map(|&lw| if lw.is_finite() { lw.exp() } else { 0.0 }).collect::<Vec<_>>(), &best_so_far, &[]);
@@ -214,7 +221,7 @@ pub fn smc<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>
                 particles: build_particle_logs(&expanded, &costs, &weights),
                 resample_indices,
                 best_cost: best_so_far.as_ref().map(|(c, _)| *c),
-                best_pattern: best_so_far.as_ref().map(|(_, s)| s.pattern.to_string()),
+                best_pattern: best_so_far.as_ref().map(|(_, b)| b.state.pattern.to_string()),
             });
         }
 
@@ -234,7 +241,8 @@ pub fn smc<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedData<F, O>
     lower_bound_pruner.print_stats();
 
     println!("\n{}", "═══ RESULT ═══".green().bold());
-    if let (Some(iter), Some((cost, state))) = (best_found_at, best_so_far.as_ref()) {
+    if let (Some(iter), Some((cost, best))) = (best_found_at, best_so_far.as_ref()) {
+        let state = &best.state;
         println!("{} {}", "best found at iteration:".dimmed(), iter.to_string().yellow());
         println!("{} {}", "pattern:".dimmed(), state.pattern.to_string().cyan().bold());
         println!("{} {}", "cost:".dimmed(), cost.to_string().green().bold());

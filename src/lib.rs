@@ -1,4 +1,5 @@
 pub mod best_first;
+pub mod candidates;
 pub mod cost;
 pub mod debug_log;
 pub mod follow;
@@ -224,17 +225,28 @@ pub fn multiple_step_search<F: LanguageFamily, O: StitchOp>(data: shared::Shared
 
         match best {
             None => break,
-            Some((best_cost, state)) => {
-                let candidate = cost::canonical_candidate::<F, O>(&result_data.egraph, &state);
-                let ho_arity: Vec<u32> = candidate.variable_indices.iter().map(|v| v.len() as u32).collect();
+            Some((best_cost, best)) => {
+                // The search already chose this candidate when it scored `state`,
+                // and threaded it back via `best` — no need to redo the
+                // optimisation here.
+                let state = &best.state;
+                let candidate = &best.selection.candidate;
+                let variable_indices = &candidate.variable_indices;
+                let ho_arity: Vec<u32> = variable_indices.iter().map(|v| v.len() as u32).collect();
                 let pat_size = cost::compute_body_size_with_ho::<F, O>(&state.pattern, &ho_arity, &result_data.egraph.analysis.weights);
-                let body_str = state.pattern.display_with_ho(&candidate.variable_indices);
-                let lambda = state.pattern.display_as_lambda(&candidate.variable_indices);
+                let body_str = state.pattern.display_with_ho(variable_indices);
+                let lambda = state.pattern.display_as_lambda(variable_indices);
                 let usage_counts = search::compute_usage_counts(&result_data.egraph, result_data.root);
-                let usage_matches: usize = state.matches.iter().map(|m| usage_counts.get(&m.root_eclass).copied().unwrap_or(1)).sum();
+                // With the `None` sentinel every match keeps every subst, so every
+                // match contributes its usage count; otherwise count only matches
+                // whose kept list is non-empty.
+                let usage_matches: usize = match &candidate.kept_substs {
+                    None => state.matches.iter().map(|m| usage_counts.get(&m.root_eclass).copied().unwrap_or(1)).sum(),
+                    Some(k) => state.matches.iter().zip(k).filter(|(_, ks)| !ks.is_empty()).map(|(m, _)| usage_counts.get(&m.root_eclass).copied().unwrap_or(1)).sum(),
+                };
                 let approx_cost = iter_original_size as i64 - pat_size as i64 * (usage_matches as i64 - 1);
                 let fn_name = format!("fn_{}", fn_name_base + abstraction_idx);
-                let (next_data, rewritten_programs) = apply_abstraction::<F, O>(result_data, &state, &candidate, &fn_name, args.rules.as_deref());
+                let (next_data, rewritten_programs) = apply_abstraction::<F, O>(result_data, state, candidate, &fn_name, args.rules.as_deref());
 
                 final_cost = Some(best_cost);
                 final_rewritten = Some(rewritten_programs);

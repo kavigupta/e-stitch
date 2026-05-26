@@ -1,8 +1,19 @@
 {
-  "compression_ratio": null,
+  "compression_ratio": 1.05,
   "cost_after_rewrites": 21,
-  "final_cost": null,
+  "final_cost": 20,
   "initial_cost": 21,
+  "library": [
+    {
+      "approx_cost": 11,
+      "arity": 1,
+      "lambda": "(lam (lam (lam (+ $2))))",
+      "num_matches": 4,
+      "pattern": "fn_0: (lam (lam (+ ?#0)))",
+      "pattern_size": 5,
+      "usage_matches": 3
+    }
+  ],
   "original_programs": [
     "(lam (lam (+ A)))",
     "(lam (lam (+ B)))",
@@ -10,9 +21,9 @@
     "(lam (lam (+ $0)))"
   ],
   "rewritten_programs": [
-    "(lam (lam (+ A)))",
-    "(lam (lam (+ B)))",
-    "(lam (lam (+ C)))",
+    "(fn_0 A)",
+    "(fn_0 B)",
+    "(fn_0 C)",
     "(lam (lam (+ $0)))"
   ]
 }

@@ -51,12 +51,12 @@ fn walk<F: LanguageFamily, O: StitchOp>(pattern: &RevExpr<F::Apply<OpWithVar<O>>
 /// lambda-calc) — in either case the inner metavar is the one we bind to.
 ///
 /// Comparing the bare pattern instead of the displayer's η-wrapped form
-/// sidesteps the candidate-selection mismatch: discovery may pick a
-/// non-canonical `variable_indices` (drop fv-bearing substs to display a bare
-/// `?#k` where the canonical choice would emit `(?#k $0 …)`), and the follow
-/// target inherits whatever the optimiser chose; collapsing both sides through
-/// `unwrap_pattern_db_apps` makes the check candidate-independent so the search
-/// can stop on any state that prints to either form.
+/// sidesteps the candidate-selection mismatch: discovery may pick
+/// `variable_indices` that drop fv-bearing substs to display a bare `?#k`
+/// where another candidate would emit `(?#k $0 …)`, and the follow target
+/// inherits whatever the optimiser chose; collapsing both sides through
+/// `unwrap_pattern_db_apps` makes the check candidate-independent so the
+/// search can stop on any state that prints to either form.
 pub fn matches_follow_serialized<F: LanguageFamily, O: StitchOp>(state: &crate::search::SearchState<F, O>, follow: &RevExpr<F::Apply<OpWithVar<O>>>, _egraph: &crate::lang::StitchEgraph<F::Apply<O>>) -> bool {
     let Some(bindings) = follow_unify::<F, O>(&state.pattern.pattern, follow) else { return false };
     let mut seen = std::collections::HashSet::new();

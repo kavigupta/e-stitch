@@ -1,3 +1,4 @@
+use crate::candidates::enumerate_candidates;
 use crate::lang::{LanguageFamily, StitchDisc, StitchEgraph, StitchLanguage, StitchOp, Weights, enode_fv};
 use crate::pattern::Pattern;
 use crate::search::SearchState;
@@ -78,21 +79,32 @@ pub fn compute_variable_indices<F: LanguageFamily, O: StitchOp>(egraph: &StitchE
 /// `R^k` is a subset of the candidate's `S_k` for every slot — only those
 /// substs can be rewritten via the abstraction, since `wrap_subst_args`
 /// would otherwise hit a fv it can't permute onto a wrap-lam slot.
-///
-/// Today every caller constructs the "all-fv-captured, all-substs-kept"
-/// canonical candidate (`variable_indices = compute_variable_indices(...)`,
-/// `kept_substs = None`), so behavior is unchanged from the pre-refactor
-/// single-tuple cost model. The struct exists so a future optimiser can
-/// enumerate alternative candidates and pick the cheapest.
 #[derive(Debug, Clone)]
 pub struct CostCandidate {
     pub variable_indices: Vec<Vec<i32>>,
     /// Per-match selection of compatible subst indices into `matches[i].substs`.
     /// `None` is the "all substs kept" sentinel — avoids allocating the dense
-    /// `(0..len)` list for the common fast-path candidate. `Some(v)` lists the
-    /// kept indices explicitly, and `v[i]` empty means match `i` contributes
-    /// no rewrite.
+    /// `(0..len)` list for the very common fast-path candidate. `Some(v)`
+    /// lists the kept indices explicitly, and `v[i]` empty means match `i`
+    /// contributes no rewrite.
     pub kept_substs: Option<Vec<Vec<usize>>>,
+}
+
+/// Selection picked by the cost optimizer: the candidate with minimum total
+/// cost, plus that cost.
+#[derive(Debug, Clone)]
+pub struct CostSelection {
+    pub cost: usize,
+    pub candidate: CostCandidate,
+}
+
+/// A `SearchState` paired with the `CostSelection` the cost optimiser picked
+/// for it. The search threads this back to `multiple_step_search` so the
+/// downstream display + rewrite path doesn't have to redo the optimisation.
+#[derive(Clone)]
+pub struct SearchStateWithCostSelection<F: crate::lang::LanguageFamily, O: crate::lang::StitchOp> {
+    pub state: crate::search::SearchState<F, O>,
+    pub selection: CostSelection,
 }
 
 /// Build a copy of `eclass` in `egraph` with every free DB leaf permuted onto
@@ -387,9 +399,8 @@ pub struct RewriteAnalysis<'a, F: LanguageFamily, O: StitchOp> {
     pub search_state: &'a SearchState<F, O>,
     pub eclass_to_match_idx: &'a FxHashMap<Id, usize>,
     pub ho_arity: &'a [u32],
-    /// Per-match list of compatible subst indices. `None` is the
-    /// "all-substs-kept" sentinel and matches today's behavior; `Some(k)`
-    /// restricts the rewrite consideration at match `i` to `k[i]`.
+    /// Per-match list of compatible subst indices. `None` means every subst
+    /// is considered compatible.
     pub kept_substs: Option<&'a [Vec<usize>]>,
 }
 
@@ -402,6 +413,9 @@ impl<'a, F: LanguageFamily, O: StitchOp> StitchAnalysis<F::Apply<O>> for Rewrite
             let substs = &sizes.analysis.search_state.matches[i].substs;
             let weights = sizes.weights();
             let ho_arity = sizes.analysis.ho_arity;
+            // Cost of rewriting a single subst at this match root. Inlined and
+            // dispatched via match below (rather than `Box<dyn Iterator>`) so
+            // the hot solver loop doesn't heap-allocate per call.
             let cost_of = |subst: &crate::matching::Subst| -> i64 {
                 let stub_size = F::stub_application_size::<O>("inv_0", subst.vars.len(), weights) as i64;
                 let args_size: i64 = subst
@@ -428,26 +442,38 @@ impl<'a, F: LanguageFamily, O: StitchOp> StitchAnalysis<F::Apply<O>> for Rewrite
     }
 }
 
-/// Returns the total cost: compressed corpus size plus the abstraction's own
-/// pattern body size. Each `?#k` with `ho_arity[k] > 0` has its body uses
-/// applied to the enclosing binders (`(@ … (@ ?#k $0) … $h-1)`), which adds
-/// `h * (app_cost + sym_var_cost)` per occurrence.
+/// Returns the total cost (compressed corpus size + abstraction body size),
+/// optimised over every meaningful `variable_indices` candidate. See
+/// `enumerate_candidates` for the candidate space. Each `?#k` with
+/// `|S_k| > 0` has its body uses applied to the enclosing binders
+/// (`(@ … (@ ?#k $0) … $h-1)`), which adds `h * (app_cost + sym_var_cost)`
+/// per occurrence.
 pub fn compute_cost<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F::Apply<O>>, root: egg::Id, cache: &CostCache, scratch: &mut CostScratch, search_state: &SearchState<F, O>, check_slow: bool) -> usize {
-    let candidate = canonical_candidate::<F, O>(egraph, search_state);
-    let ho_arity: Vec<u32> = candidate.variable_indices.iter().map(|v| v.len() as u32).collect();
-    let cost = compute_size_for_candidate(egraph, root, cache, scratch, search_state, check_slow, &candidate);
-    let body_size = compute_body_size_with_ho::<F, O>(&search_state.pattern, &ho_arity, &egraph.analysis.weights);
-    cost + body_size
+    compute_cost_and_select(egraph, root, cache, scratch, search_state, check_slow).cost
 }
 
-/// The "all-fv-captured, all-substs-kept" canonical candidate — matches the
-/// pre-refactor behavior of `compute_size` and `apply_abstraction`. Future
-/// optimisers can enumerate alternatives; today every entry point uses this.
-pub fn canonical_candidate<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F::Apply<O>>, search_state: &SearchState<F, O>) -> CostCandidate {
-    CostCandidate {
-        variable_indices: compute_variable_indices::<F, O>(egraph, search_state),
-        kept_substs: None,
+/// Optimise over every meaningful candidate. Returns the chosen candidate
+/// (variable_indices + kept-subst mask) and its total cost, so callers
+/// downstream (`apply_abstraction`, `build_rewritten_egraph`) can use the
+/// same selection without redoing the optimisation.
+pub fn compute_cost_and_select<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F::Apply<O>>, root: egg::Id, cache: &CostCache, scratch: &mut CostScratch, search_state: &SearchState<F, O>, check_slow: bool) -> CostSelection {
+    let candidates = enumerate_candidates::<F, O>(egraph, search_state);
+    let weights = &egraph.analysis.weights;
+    // Hoisted: fill once per cost call. `eclass_to_match_idx` depends only on
+    // `search_state.matches`, which is the same across every candidate, so
+    // repeating the fill per candidate was wasted work.
+    scratch.rewrite.fill(search_state);
+    let mut best: Option<CostSelection> = None;
+    for candidate in candidates {
+        let ho_arity: Vec<u32> = candidate.variable_indices.iter().map(|v| v.len() as u32).collect();
+        let corpus = compute_size_for_candidate_prefilled(egraph, root, cache, scratch, search_state, check_slow, &candidate, &ho_arity);
+        let body = compute_body_size_with_ho::<F, O>(&search_state.pattern, &ho_arity, weights);
+        let cost = corpus + body;
+        if best.as_ref().is_none_or(|b| cost < b.cost) {
+            best = Some(CostSelection { cost, candidate });
+        }
     }
+    best.expect("enumerate_candidates returns at least one candidate")
 }
 
 /// Size of the abstraction's pattern body — the pattern AST counted under
@@ -471,21 +497,13 @@ pub fn compute_pattern_size<F: LanguageFamily, O: StitchOp>(pattern: &Pattern<F,
 /// constructions, making the same final pattern cost less depending on the
 /// action sequence that built it.
 pub fn compute_body_size_with_ho<F: LanguageFamily, O: StitchOp>(pattern: &Pattern<F, O>, ho_arity: &[u32], weights: &Weights) -> usize {
-    compute_pattern_size::<F, O>(pattern, weights) + compute_body_size_ho_overhead::<F, O>(pattern, ho_arity, weights)
-}
-
-/// Extra body cost from η-wrapping HO metavar occurrences: for each `?#k`
-/// with `ho_arity[k] = h > 0`, every syntactic occurrence pays
-/// `h * (app_cost + sym_var_cost)` for the `(@ … (@ ?#k $0) … $(h-1))` wrapper.
-/// Uses `pattern.var_occurrences[k]` for occurrence counts — see
-/// [`compute_body_size_with_ho`] for why that's not `vars[k].len()`.
-pub fn compute_body_size_ho_overhead<F: LanguageFamily, O: StitchOp>(pattern: &Pattern<F, O>, ho_arity: &[u32], weights: &Weights) -> usize {
+    let base = compute_pattern_size::<F, O>(pattern, weights);
     if ho_arity.iter().all(|&h| h == 0) {
-        return 0;
+        return base;
     }
     let per_app = weights.app_cost + weights.sym_var_cost;
     let ho_extra: u32 = (0..pattern.vars.len()).map(|k| pattern.var_occurrences[k] as u32 * ho_arity[k] * per_app).sum();
-    ho_extra as usize
+    base + ho_extra as usize
 }
 
 pub fn compute_recexpr_size<L: StitchLanguage>(rec_expr: &RecExpr<L>, ptr: Id, weights: &Weights) -> usize {
@@ -497,13 +515,26 @@ pub fn compute_recexpr_size<L: StitchLanguage>(rec_expr: &RecExpr<L>, ptr: Id, w
 ///
 /// Drives a `StitchAnalysisRunner` to fixed point. Match-root eclasses seed the
 /// dirty set; as their sizes improve, parents are re-dirtied and reconsidered.
+/// Compute the corpus size for a specific candidate. Only substs listed in
+/// `candidate.kept_substs[i]` are considered for rewriting at match `i`;
+/// the body size is implied by `candidate.variable_indices` and is *not*
+/// added here — callers add it via `compute_body_size_with_ho`.
 pub fn compute_size_for_candidate<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F::Apply<O>>, root: Id, cache: &CostCache, scratch: &mut CostScratch, search_state: &SearchState<F, O>, check_slow: bool, candidate: &CostCandidate) -> usize {
     scratch.rewrite.fill(search_state);
     let ho_arity: Vec<u32> = candidate.variable_indices.iter().map(|v| v.len() as u32).collect();
+    compute_size_for_candidate_prefilled(egraph, root, cache, scratch, search_state, check_slow, candidate, &ho_arity)
+}
+
+/// Same as [`compute_size_for_candidate`] but assumes `scratch.rewrite` is
+/// already filled for the current `search_state` and the caller has already
+/// computed `ho_arity`. `compute_cost_and_select` hoists both to amortise
+/// across candidates.
+#[allow(clippy::too_many_arguments)]
+fn compute_size_for_candidate_prefilled<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F::Apply<O>>, root: Id, cache: &CostCache, scratch: &mut CostScratch, search_state: &SearchState<F, O>, check_slow: bool, candidate: &CostCandidate, ho_arity: &[u32]) -> usize {
     let analysis = RewriteAnalysis {
         search_state,
         eclass_to_match_idx: &scratch.rewrite.eclass_to_match_idx,
-        ho_arity: &ho_arity,
+        ho_arity,
         kept_substs: candidate.kept_substs.as_deref(),
     };
     let mut sizes = StitchAnalysisRunner::new(egraph, cache, &mut scratch.runner, analysis);
