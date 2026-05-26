@@ -18,7 +18,7 @@ pub mod smc;
 
 use clap::{Parser, ValueEnum};
 use colored::Colorize;
-use egg::{Id, Language};
+use egg::Language;
 use rand::rngs::StdRng;
 use rand::{Rng, SeedableRng};
 
@@ -294,30 +294,8 @@ fn first_free_fn_index<L: StitchLanguage>(egraph: &StitchEgraph<L>) -> usize {
 ///
 /// Returns the fresh egraph, its root id, and the rewritten program strings.
 pub fn apply_abstraction<F: LanguageFamily, O: StitchOp>(data: shared::SharedData<F, O>, state: &search::SearchState<F, O>, candidate: &cost::CostCandidate, fn_name: &str, rule_file: Option<&str>) -> (shared::SharedData<F, O>, Vec<String>) {
-    let shared::SharedData { mut egraph, root } = data;
-    let variable_indices = &candidate.variable_indices;
-    let var_depth = &state.pattern.var_depth;
-    // Defer unions until all shifts are done. A mid-loop `union` shrinks
-    // `data.fv` on the unioned classes but leaves parent classes stale until
-    // `rebuild`, and the next iteration's `shift_free_egraph` would then
-    // read that stale fv and trip the intersection-fv assertion.
-    let mut pending: Vec<(Id, Id)> = Vec::new();
-    for (mi, m) in state.matches.iter().enumerate() {
-        let kept_iter: Box<dyn Iterator<Item = usize>> = match &candidate.kept_substs {
-            None => Box::new(0..m.substs.len()),
-            Some(k) => Box::new(k[mi].iter().copied()),
-        };
-        for si in kept_iter {
-            let subst = &m.substs[si];
-            let wrapped = cost::wrap_subst_args::<F, O>(&mut egraph, &subst.vars, variable_indices, var_depth);
-            let x = F::add_stub_application::<O>(fn_name, wrapped, &mut egraph);
-            pending.push((x, m.root_eclass));
-        }
-    }
-    for (x, root_eclass) in pending {
-        egraph.union(x, root_eclass);
-    }
-    egraph.rebuild();
+    let shared::SharedData { egraph, root } = data;
+    let egraph = cost::build_rewritten_egraph::<F, O>(egraph, state, candidate, fn_name);
     let extractor = egg::Extractor::new(&egraph, cost::WeightedSize { weights: egraph.analysis.weights });
     let programs_node = egraph[root].nodes.iter().find(|n| n.is_programs_node()).expect("root e-class should contain a `programs` enode");
     let programs: Vec<String> = programs_node.children().iter().map(|&child| <F::Apply<O> as StitchLanguage>::display_recexpr(&extractor.find_best(child).1)).collect();

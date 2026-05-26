@@ -512,19 +512,14 @@ pub fn compute_size_for_candidate<F: LanguageFamily, O: StitchOp>(egraph: &Stitc
     sizes.solve();
     let final_size = sizes.get(root);
     if check_slow {
-        let data = crate::shared::SharedData::new(egraph.clone(), root);
-        let (rewritten, _programs) = crate::apply_abstraction::<F, O>(data, search_state, candidate, "inv_0", None);
-        let slow_size = rewritten.egraph[rewritten.root].data.size as i64;
+        let rewritten = build_rewritten_egraph::<F, O>(egraph.clone(), search_state, candidate, "inv_0");
+        let slow_size = rewritten[root].data.size as i64;
         F::check_fast_vs_slow(final_size, slow_size);
         // Semantic guard: rewriting must preserve the free-variable set at the
         // root. A mismatch means `wrap_subst_args` is shifting captured args
         // incorrectly and the abstraction's call site no longer agrees with the
         // original program on outer-scope references.
-        assert_eq!(
-            egraph[root].data.fv, rewritten.egraph[rewritten.root].data.fv,
-            "free-variable set diverges after rewrite: original {:?} != rewritten {:?}",
-            egraph[root].data.fv, rewritten.egraph[rewritten.root].data.fv,
-        );
+        assert_eq!(egraph[root].data.fv, rewritten[root].data.fv, "free-variable set diverges after rewrite: original {:?} != rewritten {:?}", egraph[root].data.fv, rewritten[root].data.fv,);
     }
     final_size as usize
 }
@@ -588,6 +583,42 @@ pub fn compute_lower_bound<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph
     }
     sizes.solve();
     sizes.get(root) as usize
+}
+
+/// Consumes `egraph` and unions each match root with a `fn_name(args...)`
+/// node, then rebuilds. Source of truth for the rewrite — used both by
+/// `lib::apply_abstraction` (which extracts+reparses on top) and by
+/// `compute_size_for_candidate`'s `check_slow` validation path.
+///
+/// Each captured eclass is fed through `wrap_subst_args` to re-index its
+/// pattern-internal fv onto wrap-lam slots and shift above-pattern fv past
+/// the wrap-lams, then wrapped under `variable_indices[k].len()` λs before
+/// being passed in.
+pub fn build_rewritten_egraph<F: LanguageFamily, O: StitchOp>(mut egraph: StitchEgraph<F::Apply<O>>, search_state: &SearchState<F, O>, candidate: &CostCandidate, fn_name: &str) -> StitchEgraph<F::Apply<O>> {
+    let variable_indices = &candidate.variable_indices;
+    let var_depth = &search_state.pattern.var_depth;
+    // Defer unions until all shifts are done. A mid-loop `union` shrinks
+    // `data.fv` on the unioned classes but leaves parent classes stale until
+    // `rebuild`, and the next iteration's `shift_free_egraph` would then
+    // read that stale fv and trip the intersection-fv assertion.
+    let mut pending: Vec<(Id, Id)> = Vec::new();
+    for (mi, m) in search_state.matches.iter().enumerate() {
+        let kept_iter: Box<dyn Iterator<Item = usize>> = match &candidate.kept_substs {
+            None => Box::new(0..m.substs.len()),
+            Some(k) => Box::new(k[mi].iter().copied()),
+        };
+        for si in kept_iter {
+            let subst = &m.substs[si];
+            let wrapped = wrap_subst_args::<F, O>(&mut egraph, &subst.vars, variable_indices, var_depth);
+            let x = F::add_stub_application::<O>(fn_name, wrapped, &mut egraph);
+            pending.push((x, m.root_eclass));
+        }
+    }
+    for (x, root_eclass) in pending {
+        egraph.union(x, root_eclass);
+    }
+    egraph.rebuild();
+    egraph
 }
 
 /// Per-subst HO wrapping: for each captured arg `arg_id` at metavar slot `k`,
