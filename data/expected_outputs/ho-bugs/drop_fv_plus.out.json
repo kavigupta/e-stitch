@@ -1,0 +1,18 @@
+{
+  "compression_ratio": null,
+  "cost_after_rewrites": 21,
+  "final_cost": null,
+  "initial_cost": 21,
+  "original_programs": [
+    "(lam (lam (+ A)))",
+    "(lam (lam (+ B)))",
+    "(lam (lam (+ C)))",
+    "(lam (lam (+ $0)))"
+  ],
+  "rewritten_programs": [
+    "(lam (lam (+ A)))",
+    "(lam (lam (+ B)))",
+    "(lam (lam (+ C)))",
+    "(lam (lam (+ $0)))"
+  ]
+}
