@@ -147,8 +147,13 @@ pub struct SearchState<F: LanguageFamily, O: StitchOp> {
     /// match set's size (and are therefore strictly dominant successors).
     pub num_substs: usize,
     /// Best-first canonical-ordering device: `Some(k)` means `?#0..?#(k-1)`
-    /// are committed to never being expanded *and* are forbidden from
-    /// participating in `Reuse`. Expanding `?#k` raises this to `Some(k)`.
+    /// are committed to never being expanded, and same-depth `Reuse` pairs
+    /// `(i, j)` with `max(i, j) < k` are forbidden (since at least one of the
+    /// participants must be a var introduced after the freeze cursor advanced).
+    /// Expanding `?#k` raises this to `Some(max(fc, k))`; a non-dominant
+    /// `Reuse` with drop index `d` raises it to `Some(max(fc, d))`. Dominant
+    /// short-circuits (reuse-dominance and useless-non-frozen inlining) leave
+    /// `fc` untouched — they aren't choosing among canonical-order siblings.
     /// `None` disables the rule entirely — SMC uses this so it can dedupe
     /// purely on the pattern's `RecExpr`.
     pub frozen_count: Option<usize>,
@@ -358,6 +363,19 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
     /// Used by best-first and by SMC after sampling so we don't materialise
     /// child states for successors that don't get picked.
     pub fn apply_action(&self, action: &Action<F::Discriminant<O>>, shared: &SharedSearchData<F, O>) -> SearchState<F, O> {
+        self.apply_action_impl(action, shared, false)
+    }
+
+    /// Variant of `apply_action` for moves taken as the unique dominant
+    /// successor: `fc` is *not* bumped by the move itself. Mirrors the
+    /// fc-preserving contract of `inline_useless_nonfrozen` — dominant moves
+    /// don't compete with canonical-order siblings, so they shouldn't
+    /// restrict downstream expansions/reuses.
+    fn apply_action_dominant(&self, action: &Action<F::Discriminant<O>>, shared: &SharedSearchData<F, O>) -> SearchState<F, O> {
+        self.apply_action_impl(action, shared, true)
+    }
+
+    fn apply_action_impl(&self, action: &Action<F::Discriminant<O>>, shared: &SharedSearchData<F, O>, dominant: bool) -> SearchState<F, O> {
         let mut new_pattern = self.pattern.clone();
         let mut new_frozen_count = self.frozen_count;
         let (new_matches, new_num_substs) = match action {
@@ -381,13 +399,17 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
                 let d_a = self.pattern.var_depth[var_idx];
                 let d_b = self.pattern.var_depth[second_var_idx];
                 let shallow_idx = if d_a <= d_b { var_idx } else { second_var_idx };
-                // Reuse is unconstrained by `frozen_count` (the freeze rule
-                // only restricts syntactic expansions). If reuse removes a
-                // var at index below `fc`, shift `fc` down so it still refers
-                // to the same expand-threshold position after the index shift
-                // in `pattern.reuse`.
+                // Non-dominant reuse advances the freeze cursor past the drop
+                // slot, canonicalising the reuse-vs-earlier-expand ordering:
+                // any expand of `var_idx < drop_idx` must happen before this
+                // reuse, not after. Dominant reuses leave fc alone (see
+                // `apply_action_dominant`). The post-bump `drop_idx < fc`
+                // shift then accounts for the index-collapse in `pattern.reuse`.
                 if let Some(fc) = new_frozen_count.as_mut() {
                     let drop_idx = var_idx.max(second_var_idx);
+                    if !dominant {
+                        *fc = (*fc).max(drop_idx);
+                    }
                     if drop_idx < *fc {
                         *fc -= 1;
                     }
@@ -452,18 +474,22 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
         // eclass used thousands of times looks like the same support as one
         // that fires on thousands of distinct one-off eclasses.
         let usage = |root: Id| shared.usage_counts.get(&root).copied().unwrap_or(1);
-        // `var_reusable` is a best-first canonical-ordering device, mirroring
-        // `frozen_count`. SMC (frozen_count = None) ignores it so its reuse
-        // exploration stays unrestricted. We only enforce it on *same-depth*
-        // reuse pairs — cross-depth reuse inherently requires an intervening
-        // expansion (the depth difference is *created* by expansion), so the
-        // reuse-before-expand canonical order can't apply to it.
-        let enforce_reusable = self.frozen_count.is_some();
+        // Same-depth reuse canonicalisation: a non-dominant reuse `(i, j)`
+        // bumps `fc` to `max(fc, j)` (see `apply_action`), so once `fc` has
+        // advanced past both indices the same merge is reachable via an
+        // earlier reuse and is a duplicate here. Equivalently, with `i < j`,
+        // skip iff `j < fc`. SMC (frozen_count = None) ignores this. We only
+        // enforce on same-depth pairs — cross-depth reuse inherently requires
+        // an intervening expansion (the depth gap is *created* by expansion),
+        // so the canonical order can't apply to it.
         for i in 0..n {
             for j in (i + 1)..n {
                 let di = self.pattern.var_depth[i];
                 let dj = self.pattern.var_depth[j];
-                if enforce_reusable && di == dj && !self.pattern.var_reusable[i] && !self.pattern.var_reusable[j] {
+                if di == dj
+                    && let Some(fc) = self.frozen_count
+                    && j < fc
+                {
                     continue;
                 }
                 let (support, raw_count): (usize, usize) = self.matches.iter().fold((0, 0), |(s, r), m| {
@@ -475,7 +501,7 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
                 }
                 if opt_dominance_reuse && raw_count == self.num_substs {
                     *dominance_hits += 1;
-                    let child = self.apply_action(&Action::Reuse { keep: i, drop: j }, shared);
+                    let child = self.apply_action_dominant(&Action::Reuse { keep: i, drop: j }, shared);
                     return SuccessorEnum::Dominant { child, support };
                 }
                 out.push((Action::Reuse { keep: i, drop: j }, support));

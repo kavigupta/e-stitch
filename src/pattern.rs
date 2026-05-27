@@ -33,13 +33,6 @@ pub struct Pattern<F: LanguageFamily, O: StitchOp> {
     /// per parent reference, matching `compute_recexpr_size`'s semantics.
     /// Maintained incrementally by `expand`/`reuse`.
     pub var_occurrences: Vec<usize>,
-    /// True iff `?#k` is still eligible to participate in `Reuse`. Each var
-    /// starts true; any `expand` flips all *previously existing* vars to false
-    /// (the newly-introduced children are inserted with `true`). The effect is
-    /// to sequence all reuses on a given cohort of vars before any further
-    /// expansion: once you expand again, only the freshest children remain
-    /// reusable.
-    pub var_reusable: Vec<bool>,
 }
 
 fn var_node<F: LanguageFamily, O: StitchOp>(idx: u32) -> F::Apply<OpWithVar<O>> {
@@ -55,7 +48,6 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
             var_depth: vec![0],
             var_cross_depth: vec![false],
             var_occurrences: vec![1],
-            var_reusable: vec![true],
         }
     }
 
@@ -72,13 +64,6 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
         let parent_depth = self.var_depth.remove(var_idx);
         let parent_cross = self.var_cross_depth.remove(var_idx);
         let parent_occ = self.var_occurrences.remove(var_idx);
-        self.var_reusable.remove(var_idx);
-        // Any expansion flips every *previously existing* var to non-reusable;
-        // only the children we insert below start out reusable. See
-        // `var_reusable` docs.
-        for r in &mut self.var_reusable {
-            *r = false;
-        }
         assert!(self.pattern[var_positions[0]].discriminant().as_var().is_some(), "Attempting to expand a non-var");
         let num_children = target.len();
         let target_disc = target.discriminant();
@@ -112,7 +97,6 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
             // the new enode replaces every occurrence of the parent var — so
             // the syntactic walk visits each new child exactly `parent_occ` times.
             self.var_occurrences.insert(var_idx + j, parent_occ);
-            self.var_reusable.insert(var_idx + j, true);
         }
         let new_node = F::make(F::map_discriminant(target_disc, OpWithVar::Node), new_children);
 
@@ -151,14 +135,6 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
         self.var_cross_depth[keep_idx] = cross_depth;
         let dropped_occ = self.var_occurrences.remove(drop_idx);
         self.var_occurrences[keep_idx] += dropped_occ;
-        // Reusing (i, j) commits to a canonical order: any var strictly below
-        // the *higher* of the two participating indices becomes non-reusable,
-        // so future reuses must involve indices ≥ drop_idx (including the
-        // kept slot itself, since we've moved past it).
-        for r in &mut self.var_reusable[..drop_idx] {
-            *r = false;
-        }
-        self.var_reusable.remove(drop_idx);
 
         // Shift names of trailing vars down by one.
         for p in drop_idx..self.vars.len() {
@@ -186,7 +162,6 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
         self.var_depth.remove(var_idx);
         self.var_cross_depth.remove(var_idx);
         self.var_occurrences.remove(var_idx);
-        self.var_reusable.remove(var_idx);
 
         for p in var_idx..self.vars.len() {
             let shifted = var_node::<F, O>(p as u32);
