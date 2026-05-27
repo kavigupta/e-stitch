@@ -206,9 +206,12 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
         let n = extraction.len();
         debug_assert_eq!(usize::from(root), n - 1, "concretize: root must be the last extraction node");
         let base = self.pattern.nodes.len();
+        // `remap` is only invoked when traversing child references; n == 1
+        // means a single leaf root with no children, so the closure body
+        // (which would underflow `n - 2`) is never reached.
         let remap = |c: Id| {
             let i = usize::from(c);
-            debug_assert!(i < n - 1, "concretize: extraction child references must skip the root");
+            debug_assert!(i + 1 < n, "concretize: extraction child references must skip the root");
             Id::from(base + n - 2 - i)
         };
         for i in (0..n - 1).rev() {
