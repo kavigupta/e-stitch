@@ -592,6 +592,10 @@ impl<F: LanguageFamily, O: StitchOp> std::fmt::Display for SearchState<F, O> {
 /// Top-down pass: root gets count 1, then propagate to children of the size-minimal
 /// enode (same rule as [`build_size_minimal_extraction`] and `WeightedSize`).
 ///
+/// Heuristic: this only accounts for the pre-rewrite extraction. `RewriteAnalysis`
+/// may route through a non-minimal enode when a rewrite shrinks the result, so
+/// counts can under-attribute multiplicity at e-classes only reached that way.
+///
 /// Canonical eclass ids are not necessarily in topological order after unions
 /// (a parent's canonical id can be lower than a child's), so we explicitly
 /// derive a parents-before-children order via iterative DFS post-order from
