@@ -248,7 +248,12 @@ pub fn multiple_step_search<F: LanguageFamily, O: StitchOp>(data: shared::Shared
                 let fn_name = format!("fn_{}", fn_name_base + abstraction_idx);
                 let (next_data, rewritten_programs) = apply_abstraction::<F, O>(result_data, state, candidate, &fn_name, args.rules.as_deref());
 
-                final_cost = Some(best_cost);
+                // `best_cost` is the search's score for this iteration: rewritten
+                // corpus + this abstraction's body. Earlier iterations rewrote the
+                // corpus into `fn_K(...)` call sites only — their bodies live in
+                // the library and must be added separately.
+                let prev_bodies: usize = library.iter().map(|a: &results::AbstractionResult| a.pattern_size).sum();
+                final_cost = Some(best_cost + prev_bodies);
                 final_rewritten = Some(rewritten_programs);
                 library.push(results::AbstractionResult {
                     pattern: format!("{fn_name}: {body_str}"),
