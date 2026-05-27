@@ -575,7 +575,8 @@ impl<F: LanguageFamily, O: StitchOp> std::fmt::Display for SearchState<F, O> {
 }
 
 /// Computes how many times each e-class appears in the fully-expanded corpus tree.
-/// Top-down pass: root gets count 1, then propagate to children of the best (first) enode.
+/// Top-down pass: root gets count 1, then propagate to children of the size-minimal
+/// enode (same rule as [`build_size_minimal_extraction`] and `WeightedSize`).
 ///
 /// Canonical eclass ids are not necessarily in topological order after unions
 /// (a parent's canonical id can be lower than a child's), so we explicitly
@@ -583,6 +584,8 @@ impl<F: LanguageFamily, O: StitchOp> std::fmt::Display for SearchState<F, O> {
 /// the root and propagate along it.
 pub fn compute_usage_counts<L: crate::lang::StitchLanguage>(egraph: &StitchEgraph<L>, root: Id) -> FxHashMap<Id, usize> {
     let root = egraph.find(root);
+    let weights = egraph.analysis.weights;
+    let min_enode = |id: Id| -> Option<&L> { egraph[id].nodes.iter().min_by_key(|n| n.discriminant().intrinsic_size(&weights) as u64 + n.children().iter().map(|&c| egraph[c].data.size as u64).sum::<u64>()) };
     let mut order: Vec<Id> = Vec::new();
     let mut seen: FxHashSet<Id> = FxHashSet::default();
     let mut stack: Vec<(Id, bool)> = vec![(root, false)];
@@ -595,7 +598,7 @@ pub fn compute_usage_counts<L: crate::lang::StitchLanguage>(egraph: &StitchEgrap
             continue;
         }
         stack.push((id, true));
-        if let Some(enode) = egraph[id].nodes.first() {
+        if let Some(enode) = min_enode(id) {
             for &child in enode.children() {
                 let child = egraph.find(child);
                 if !seen.contains(&child) {
@@ -612,7 +615,7 @@ pub fn compute_usage_counts<L: crate::lang::StitchLanguage>(egraph: &StitchEgrap
         if count == 0 {
             continue;
         }
-        if let Some(enode) = egraph[id].nodes.first() {
+        if let Some(enode) = min_enode(id) {
             for &child in enode.children() {
                 *counts.entry(egraph.find(child)).or_insert(0) += count;
             }
