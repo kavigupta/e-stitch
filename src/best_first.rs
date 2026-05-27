@@ -129,7 +129,7 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
 
     let mut nodes: Vec<Node<F, O>> = Vec::new();
     let mut heap: BinaryHeap<Reverse<(usize, usize)>> = BinaryHeap::new();
-    let mut seen: Option<SeenTracker<F, O>> = (!args.no_seen).then(SeenTracker::new);
+    let mut seen: Option<SeenTracker<F, O>> = args.opt_seen.then(SeenTracker::new);
 
     nodes.push(Node {
         parent: None,
