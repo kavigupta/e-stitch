@@ -483,8 +483,9 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
         }
         for var_idx in 0..n {
             // Freezing rule: expanding `?#k` commits to never expanding any
-            // `?#j` with j < k; `max_arity` caps how many vars best-first will
-            // create. Both checks are no-ops for SMC (frozen_count = None,
+            // `?#j` with j < k; `max_arity` caps the eventual frozen_count
+            // (since a successful expand at var_idx raises fc to >= var_idx).
+            // Both checks are no-ops for SMC (frozen_count = None,
             // max_arity = usize::MAX).
             if var_idx > max_arity {
                 continue;
