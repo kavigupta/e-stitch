@@ -385,6 +385,9 @@ pub struct RewriteScratch {
 
 impl RewriteScratch {
     /// Refills the index map from `search_state`. Clears first; retains capacity.
+    /// Match-root ids are canonical by construction (see `MatchAtEClass`): they
+    /// originate from `egraph.classes()` and propagate unchanged through
+    /// `build_subset_matches`; the egraph isn't unioned during search.
     pub fn fill<F: LanguageFamily, O: StitchOp>(&mut self, search_state: &SearchState<F, O>) {
         self.eclass_to_match_idx.clear();
         for (i, m) in search_state.matches.iter().enumerate() {
