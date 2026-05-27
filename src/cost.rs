@@ -510,6 +510,9 @@ pub fn compute_body_size_with_ho<F: LanguageFamily, O: StitchOp>(pattern: &Patte
     base + ho_extra as usize
 }
 
+/// Tree-expanded size: DAG-shared subtrees are counted once per parent
+/// reference (e.g. `(+ a a a)` counts `a` three times). Matches the
+/// `var_occurrences` convention used throughout cost accounting.
 pub fn compute_recexpr_size<L: StitchLanguage>(rec_expr: &RecExpr<L>, ptr: Id, weights: &Weights) -> usize {
     let node = &rec_expr[ptr];
     node.discriminant().intrinsic_size(weights) as usize + node.children().iter().map(|&child| compute_recexpr_size::<L>(rec_expr, child, weights)).sum::<usize>()
