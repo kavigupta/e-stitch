@@ -396,7 +396,12 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
                 Self::build_subset_matches_reuse(&self.matches, var_idx, second_var_idx, shallow_idx, d_a.min(d_b), d_a.max(d_b), shared)
             }
         };
-        SearchState { pattern: new_pattern, matches: new_matches, num_substs: new_num_substs, frozen_count: new_frozen_count }
+        SearchState {
+            pattern: new_pattern,
+            matches: new_matches,
+            num_substs: new_num_substs,
+            frozen_count: new_frozen_count,
+        }
     }
 
     /// Returns the enumerable successors of `self`. When dominance pruning
