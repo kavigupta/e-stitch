@@ -457,6 +457,10 @@ pub fn compute_cost<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F::App
 /// downstream (`apply_abstraction`, `build_rewritten_egraph`) can use the
 /// same selection without redoing the optimisation.
 pub fn compute_cost_and_select<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F::Apply<O>>, root: egg::Id, cache: &CostCache, scratch: &mut CostScratch, search_state: &SearchState<F, O>, check_slow: bool) -> CostSelection {
+    assert!(
+        !search_state.matches.is_empty(),
+        "compute_cost_and_select: search_state.matches is empty; a pattern with no matches has no rewrite candidates to optimise over. Callers (best_first, smc) must filter empty-match states before scoring."
+    );
     let candidates = enumerate_candidates::<F, O>(egraph, search_state);
     let weights = &egraph.analysis.weights;
     // Hoisted: fill once per cost call. `eclass_to_match_idx` depends only on
