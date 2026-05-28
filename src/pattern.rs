@@ -13,9 +13,10 @@ use rustc_hash::FxHashMap;
 ///
 /// Canonical-form invariant: for every `k`, every `Id` in `vars[k]` holds a
 /// node whose op is `OpWithVar::Var(egg::Var::from(k as u32))` — so the tree's
-/// var names match their DFS first-appearance order. `expand` and `reuse`
-/// preserve this by rewriting affected var leaves, so `pattern.to_string()`
-/// is canonical: alpha-equivalent patterns render identically.
+/// var names match their BFS / creation order (`expand` appends new children at
+/// the end of the var list). `expand` and `reuse` preserve this by rewriting
+/// affected var leaves, so `pattern.to_string()` is canonical: alpha-equivalent
+/// patterns render identically.
 /// The storage type backing a `Pattern<F, O>`: the program language
 /// `F::Apply<O>` with `OpWithVar<O>` swapped in as its leaf-Op.
 pub type PatternRecExpr<F, O> = RevExpr<<F as LanguageFamily>::Apply<OpWithVar<O>>>;
@@ -59,10 +60,12 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
         }
     }
 
-    /// Expands the variable at `var_idx` with `target`. New children are inserted
-    /// at list positions `var_idx..var_idx+k`; any vars that previously followed
-    /// `var_idx` shift right and get their in-tree `Var(n)` leaves rewritten to
-    /// match their new position, so the canonical-form invariant is preserved.
+    /// Expands the variable at `var_idx` with `target`. The new children are
+    /// appended at the *end* of the var list (BFS / creation-order numbering),
+    /// not spliced in at `var_idx`. Removing `?#var_idx` leaves a gap, so every
+    /// var that previously followed it shifts left by one and gets its in-tree
+    /// `Var(n)` leaves rewritten to match its new position, preserving the
+    /// canonical-form invariant.
     ///
     /// Each new child meta-var inherits the parent's binder depth, plus one if
     /// `target.discriminant().binds_child(j)` is true for that slot — i.e., a
@@ -74,7 +77,7 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
         let parent_occ = self.var_occurrences.remove(var_idx);
         self.var_reusable.remove(var_idx);
         // Any expansion flips every *previously existing* var to non-reusable;
-        // only the children we insert below start out reusable. See
+        // only the children we append below start out reusable. See
         // `var_reusable` docs.
         for r in &mut self.var_reusable {
             *r = false;
@@ -83,36 +86,35 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
         let num_children = target.len();
         let target_disc = target.discriminant();
 
-        // Shift names of trailing vars: a var currently at post-removal index p
-        // will end up at post-insertion index p + num_children, so rename its leaves.
-        // (Skip the no-op case num_children == 1 where indices don't move.)
-        if num_children != 1 {
-            for p in var_idx..self.vars.len() {
-                let shifted = var_node::<F, O>((p + num_children) as u32);
-                for &id in &self.vars[p] {
-                    self.pattern[id] = shifted.clone();
-                }
+        // Removing `?#var_idx` shifts every trailing var down by one: a var now
+        // at post-removal index p still holds `Var(p+1)`, so rename its leaves.
+        for p in var_idx..self.vars.len() {
+            let shifted = var_node::<F, O>(p as u32);
+            for &id in &self.vars[p] {
+                self.pattern[id] = shifted.clone();
             }
         }
 
-        // Build the new enode with freshly-named Var children at positions var_idx..var_idx+k.
+        // Build the new enode with freshly-named Var children appended at the
+        // end of the var list, at indices `self.vars.len() + j`.
         let mut new_children = Vec::with_capacity(num_children);
         for j in 0..num_children {
-            self.pattern.nodes.push(var_node::<F, O>((var_idx + j) as u32));
+            let child_idx = self.vars.len();
+            self.pattern.nodes.push(var_node::<F, O>(child_idx as u32));
             let new_id = Id::from(self.pattern.nodes.len() - 1);
             new_children.push(new_id);
-            self.vars.insert(var_idx + j, vec![new_id]);
+            self.vars.push(vec![new_id]);
             let child_depth = parent_depth + if target_disc.binds_child(j) { 1 } else { 0 };
-            self.var_depth.insert(var_idx + j, child_depth);
+            self.var_depth.push(child_depth);
             // Children of a cross-depth-merged metavar inherit the property —
             // the multi-depth ambiguity persists down the expansion tree until
             // the slot is fully concretized.
-            self.var_cross_depth.insert(var_idx + j, parent_cross);
+            self.var_cross_depth.push(parent_cross);
             // Each new child meta-var lives at one slot of the new enode, and
             // the new enode replaces every occurrence of the parent var — so
             // the syntactic walk visits each new child exactly `parent_occ` times.
-            self.var_occurrences.insert(var_idx + j, parent_occ);
-            self.var_reusable.insert(var_idx + j, true);
+            self.var_occurrences.push(parent_occ);
+            self.var_reusable.push(true);
         }
         let new_node = F::make(F::map_discriminant(target_disc, OpWithVar::Node), new_children);
 
@@ -381,8 +383,8 @@ mod tests {
     fn expand_nested_left_first() {
         let mut p: Pattern<OpChildren, Op> = Pattern::single_var();
         p.expand(0, &op("+", 2)); // (+ ?#0 ?#1)
-        p.expand(0, &op("-", 2)); // (+ (- ?#0 ?#1) ?#2)
-        assert_eq!(p.to_string(), "(+ (- ?#0 ?#1) ?#2)");
+        p.expand(0, &op("-", 2)); // (+ (- ?#1 ?#2) ?#0): the right sibling keeps the low index, new children go to the end
+        assert_eq!(p.to_string(), "(+ (- ?#1 ?#2) ?#0)");
         assert_eq!(p.vars.len(), 3);
         assert_vars_canonical(&p);
     }
@@ -492,8 +494,8 @@ mod tests {
 
         let mut b: Pattern<OpChildren, Op> = Pattern::single_var();
         b.expand(0, &op("+", 2));
-        b.expand(0, &op("*", 2)); // (+ (* ?#0 ?#1) ?#2)
-        b.expand(2, &op("*", 2)); // (+ (* ?#0 ?#1) (* ?#2 ?#3))
+        b.expand(0, &op("*", 2)); // (+ (* ?#1 ?#2) ?#0): right sibling of + keeps index 0
+        b.expand(0, &op("*", 2)); // expand that right sibling: (+ (* ?#0 ?#1) (* ?#2 ?#3))
 
         assert_ne!(a.to_string(), b.to_string());
         assert_eq!(a.to_string(), "(+ (* ?#0 ?#1) (* ?#0 ?#1))");

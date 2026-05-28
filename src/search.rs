@@ -187,9 +187,9 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
 
     /// Builds child matches for an `expand(var_idx, target)` action from
     /// `parent_matches` without cloning the parent's substs. Mirrors
-    /// `Pattern::expand`: drops the old var from `subst.vars` and inserts the
-    /// new child eclass ids at positions `var_idx..var_idx+k`, keeping substs
-    /// aligned with the pattern's DFS-ordered vars list.
+    /// `Pattern::expand`: drops the old var from `subst.vars` and appends the
+    /// new child eclass ids at the end, keeping substs aligned with the
+    /// pattern's BFS / creation-ordered vars list.
     ///
     /// We don't fv-prune captures here: captures whose fv reaches into
     /// pattern-internal binders are handled at apply/cost time by η-wrapping
@@ -205,8 +205,8 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
                 }
                 let mut new_subst = subst.clone();
                 new_subst.vars.remove(var_idx);
-                for (j, child_id) in node.children().iter().enumerate() {
-                    new_subst.vars.insert(var_idx + j, *child_id);
+                for child_id in node.children() {
+                    new_subst.vars.push(*child_id);
                 }
                 out.push(new_subst);
             }
