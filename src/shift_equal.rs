@@ -131,7 +131,27 @@ impl<'a, L: StitchLanguage> ShiftEqCtx<'a, L> {
 #[cfg(test)]
 mod tests {
     use super::shift_equal;
-    use crate::lang::{LambdaCalcLanguage, Op, StitchEgraph, StitchOp};
+    use crate::lang::{LambdaCalcLanguage, Op, OpDB, StitchEgraph, StitchOp};
+
+    /// Why a cross-depth reuse can't be soundly collapsed to a concrete DB
+    /// leaf (and so must be gated — see `Pattern::is_cross_depth`): with the
+    /// *same* shallow capture `$0` and the *same* depths (3, 1), `shift_equal`
+    /// accepts both a deep `$0` (same e-class, via the `a == b` branch) and a
+    /// deep `$2` (a genuine shift-variant, via the structural branch). The
+    /// min-depth merge keeps only the shallow id, so an inline can no longer
+    /// tell whether the deep occurrence should become `$0` or `$2`. Both reuses
+    /// are valid while the var stays a (higher-order) metavar.
+    #[test]
+    fn cross_depth_reuse_is_inline_ambiguous() {
+        let mut eg: StitchEgraph<LambdaCalcLanguage<OpDB<Op>>> = egg::EGraph::default();
+        let e0 = eg.add(LambdaCalcLanguage::Leaf(OpDB::Var(0))); // `$0`, fv {0}
+        let e2 = eg.add(LambdaCalcLanguage::Leaf(OpDB::Var(2))); // `$2`, fv {2}
+        eg.rebuild();
+        // A: deep `$0` accepted via `a == b` (fv {0} is below the gap [1, 3)).
+        assert!(shift_equal(e0, e0, 3, 1, &eg), "same-e-class cross-depth reuse");
+        // B: deep `$2` accepted via the structural shift ($2 = $0 + (3-1)).
+        assert!(shift_equal(e2, e0, 3, 1, &eg), "shift-variant cross-depth reuse");
+    }
 
     /// Build the cyclic reproducer e-graph and return `(R_d, R_s)`. `a_first`
     /// controls the canonical-id ordering of the `A` and `C` e-classes (egg
