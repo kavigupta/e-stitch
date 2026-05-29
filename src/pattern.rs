@@ -33,12 +33,11 @@ pub struct Pattern<F: LanguageFamily, O: StitchOp> {
     /// per parent reference, matching `compute_recexpr_size`'s semantics.
     /// Maintained incrementally by `expand`/`reuse`.
     pub var_occurrences: Vec<usize>,
-    /// True iff `?#k` is still eligible to participate in `Reuse`. Each var
-    /// starts true; any `expand` flips all *previously existing* vars to false
-    /// (the newly-introduced children are inserted with `true`). The effect is
-    /// to sequence all reuses on a given cohort of vars before any further
-    /// expansion: once you expand again, only the freshest children remain
-    /// reusable.
+    /// True iff `?#k` is in the freshest cohort. `expand` flips all
+    /// pre-existing vars to false and inserts new children as true; `reuse`
+    /// flips `0..drop_idx` to false (including the kept slot). Search skips
+    /// `Reuse(i, j)` only when *both* are false — that pair would re-merge
+    /// cohorts a prior action already committed to (duplicate canonical).
     pub var_reusable: Vec<bool>,
 }
 
@@ -207,9 +206,12 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
         let n = extraction.len();
         debug_assert_eq!(usize::from(root), n - 1, "concretize: root must be the last extraction node");
         let base = self.pattern.nodes.len();
+        // `remap` is only invoked when traversing child references; n == 1
+        // means a single leaf root with no children, so the closure body
+        // (which would underflow `n - 2`) is never reached.
         let remap = |c: Id| {
             let i = usize::from(c);
-            debug_assert!(i < n - 1, "concretize: extraction child references must skip the root");
+            debug_assert!(i + 1 < n, "concretize: extraction child references must skip the root");
             Id::from(base + n - 2 - i)
         };
         for i in (0..n - 1).rev() {
