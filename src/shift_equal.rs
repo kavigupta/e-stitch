@@ -23,10 +23,7 @@ pub fn shift_equal<L: StitchLanguage>(a: Id, b: Id, da: u32, db: u32, egraph: &S
         // same value. Across a depth gap it is shift-equal-to-itself only when
         // *closed*: a free index `$i` names a different binder at each depth
         // (`$i` ≠ `$i + s`), so a non-closed same-e-class capture is NOT a
-        // genuine shift-variant. The old `fv_outside_gap` shortcut accepted it
-        // when its free indices fell below the gap, conflating distinct binders
-        // (e.g. `$0`@1 and `$0`@3 — the outer binder vs a local one). Only the
-        // structural (`a != b`) path below admits true shift-variants.
+        // genuine shift-variant.
         return da == db || egraph[a].data.fv.is_empty();
     }
     if da == db {
