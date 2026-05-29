@@ -70,19 +70,19 @@ fn target_is_free_db_var(dbidx: i32, d_k: u32) -> bool {
     (dbidx as u32) >= d_k
 }
 
-/// True iff `target` cannot be expanded to in a literal expansion. A DB-var
-/// leaf is rejected when it is free above the pattern (index `≥ depth`, so it
-/// would reference a binder outside the abstraction), or when the var is
-/// `cross_depth`: the deep occurrence may reference a binder shared with the
-/// shallow one, so a single concrete `$n` leaf would name the wrong binder at
-/// the deeper site (the merge dropped the deep e-class needed to shift it). The
-/// reuse is only sound while the var stays an η-reconcilable metavar argument.
-fn invalid_literal_expansion<L: Language>(target: &L, depth: u32, cross_depth: bool) -> bool
+/// True iff `target` cannot be expanded to in a literal expansion: a DB-var
+/// leaf free above the pattern (index `≥ depth`) would reference a binder
+/// outside the abstraction. For a cross-depth var, `depth` is the *min* depth;
+/// a pattern-internal index `i < depth` is sound at every occurrence because
+/// `expand` shifts the spliced leaf to each occurrence's depth (every surviving
+/// cross-depth reuse is a genuine shift-variant — `shift_equal` rejects
+/// same-e-class cross-depth).
+fn invalid_literal_expansion<L: Language>(target: &L, depth: u32) -> bool
 where
     L::Discriminant: StitchDisc,
 {
     let Some(dbidx) = target.discriminant().de_bruijn_index() else { return false };
-    cross_depth || target_is_free_db_var(dbidx, depth)
+    target_is_free_db_var(dbidx, depth)
 }
 
 /// A deterministic move taken at a search node: either expanding a pattern variable
@@ -299,14 +299,15 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
     /// canonical order, so it shouldn't bump the freeze cursor.
     ///
     /// Concretizations are applied in descending `var_idx` order so earlier
-    /// indices don't shift mid-loop. Cross-depth-reused vars are skipped: the
-    /// merge keeps only the shallow capture, so collapsing the var to a concrete
-    /// subtree would name the wrong binder at the deeper site when that site
-    /// references a shared (above) binder — the deep e-class needed to tell that
-    /// apart was dropped. See [`Pattern::is_cross_depth`] for a concrete case.
+    /// indices don't shift mid-loop. Cross-depth-reused vars are inlined too:
+    /// `Pattern::concretize` splices the size-minimal extraction shifted to each
+    /// occurrence's own depth. This is sound because every surviving cross-depth
+    /// reuse is a genuine shift-variant — `shift_equal` rejects same-e-class
+    /// cross-depth reuses, so the deeper occurrence really is the shallow
+    /// capture shifted up by the depth gap.
     pub fn inline_useless_nonfrozen(&self, shared: &SharedSearchData<F, O>) -> Option<SearchState<F, O>> {
         let start = self.frozen_count.unwrap_or(0);
-        let mut targets: Vec<(usize, Id)> = (start..self.pattern.vars.len()).filter(|&k| !self.pattern.is_cross_depth(k)).filter_map(|k| self.useless_var_eclass(k, shared).map(|id| (k, id))).collect();
+        let mut targets: Vec<(usize, Id)> = (start..self.pattern.vars.len()).filter_map(|k| self.useless_var_eclass(k, shared).map(|id| (k, id))).collect();
         if targets.is_empty() {
             return None;
         }
@@ -501,7 +502,6 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
                 continue;
             }
             let d_k = self.pattern.var_depth[var_idx];
-            let cross_depth = self.pattern.is_cross_depth(var_idx);
             let mut shape_idx: FxHashMap<(F::Discriminant<O>, usize), usize> = FxHashMap::default();
             let mut shapes: Vec<((F::Discriminant<O>, usize), usize)> = Vec::new();
             for m in &self.matches {
@@ -509,7 +509,7 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
                 for subst in &m.substs {
                     let eclass = &shared.egraph[subst.vars[var_idx]];
                     for node in &eclass.nodes {
-                        if invalid_literal_expansion(node, d_k, cross_depth) {
+                        if invalid_literal_expansion(node, d_k) {
                             continue;
                         }
                         let key = (node.discriminant(), node.children().len());

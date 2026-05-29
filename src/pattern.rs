@@ -93,15 +93,16 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
         }
 
         if num_children == 0 {
-            // Leaf target: the slot disappears, no children to insert. The same
-            // leaf goes into every position. For a cross-depth var this is sound
-            // because a pattern-internal DB index `$i` (i < min depth) reads as
-            // the local `i`-up binder at *every* occurrence — the same reading
-            // β/η give the metavar. Free-above DB leaves can't get here: the
-            // caller's `target_is_free_db_var` check rejects `i ≥ depth`.
-            let new_node = F::make(F::map_discriminant(target_disc.clone(), OpWithVar::Node), Vec::new());
-            for var_id in var_positions {
-                self.pattern[var_id] = new_node.clone();
+            // Leaf target: the slot disappears, no children to insert. Each
+            // occurrence keeps its own node. Every surviving cross-depth reuse is
+            // a genuine shift-variant (`shift_equal` now rejects same-e-class
+            // cross-depth), so a DB-var leaf captured at the min depth is shifted
+            // up to each occurrence's depth — `delta = 0` when all occurrences
+            // share one depth, a no-op for non-DB leaves regardless.
+            for &var_id in &var_positions {
+                let delta = depths[usize::from(var_id)] as i32 - parent_depth as i32;
+                let disc = shift_db_disc::<F, O>(target_disc.clone(), delta);
+                self.pattern[var_id] = F::make(F::map_discriminant(disc, OpWithVar::Node), Vec::new());
             }
             return;
         }
@@ -197,13 +198,17 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
     /// size-minimal eclass walk gated by a `fv < var_depth[var_idx]` check.
     ///
     /// Multi-position vars (from prior `reuse`) get the root node cloned into
-    /// each position; the subtree's internal nodes are appended once, so the
-    /// pattern DAG is shared across positions. Trailing var names shift down by
-    /// one to keep the canonical-form invariant. The extraction is spliced
-    /// *unshifted*: the caller only inlines useless vars (`fv < var_depth`), so
-    /// every free DB index reads as the local `i`-up binder at each occurrence
-    /// — the same reading β/η give the metavar — and is correct at every depth.
+    /// each position. When every occurrence sits at one depth, the subtree's
+    /// internal nodes are appended once and shared. When occurrences span
+    /// different depths, every surviving cross-depth reuse is a genuine
+    /// shift-variant (`shift_equal` rejects same-e-class cross-depth), so each
+    /// occurrence gets its own copy with free DB indices shifted up to that
+    /// occurrence's depth — the deeper site then reads the correctly-shifted
+    /// value, exactly as β/η would for the kept metavar. Trailing var names
+    /// shift down by one to keep the canonical-form invariant.
     pub fn concretize(&mut self, var_idx: usize, extraction: &[F::Apply<OpWithVar<O>>], root: Id) {
+        let depths = self.occurrence_depths();
+        let ref_depth = self.var_depth[var_idx];
         let var_positions = self.vars.remove(var_idx);
         self.var_depth.remove(var_idx);
         self.var_occurrences.remove(var_idx);
@@ -216,22 +221,55 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
             }
         }
 
-        // `extraction` is postorder (root last, children at strictly lower
-        // indices). `self.pattern` is a `RevExpr`, which requires *parents* at
-        // lower indices than their children — so we append the non-root nodes in
-        // reverse extraction order, remapping each old extraction index
-        // `i ∈ [0, n-1)` to pattern position `base + (n - 2 - i)`. The root gets
-        // cloned (same remap) into every var position; since var positions sit
-        // at indices `< base` and remapped children at indices `>= base`,
-        // root↦children references go strictly forward in pattern indices.
         let n = extraction.len();
         debug_assert_eq!(usize::from(root), n - 1, "concretize: root must be the last extraction node");
+
+        let same_depth = var_positions.iter().all(|&id| depths[usize::from(id)] == depths[usize::from(var_positions[0])]);
+        if same_depth {
+            // Shared splice. `extraction` is postorder (root last, children at
+            // strictly lower indices). `self.pattern` is a `RevExpr` (parents at
+            // lower indices than children), so append the non-root nodes in
+            // reverse order, remapping each old index `i ∈ [0, n-1)` to pattern
+            // position `base + (n - 2 - i)`, then clone the (remapped) root into
+            // every var position.
+            let base = self.pattern.nodes.len();
+            let remap = |c: Id| {
+                let i = usize::from(c);
+                debug_assert!(i < n - 1, "concretize: extraction child references must skip the root");
+                Id::from(base + n - 2 - i)
+            };
+            for i in (0..n - 1).rev() {
+                let mut clone = extraction[i].clone();
+                for c in clone.children_mut() {
+                    *c = remap(*c);
+                }
+                self.pattern.nodes.push(clone);
+            }
+            let mut root_node = extraction[n - 1].clone();
+            for c in root_node.children_mut() {
+                *c = remap(*c);
+            }
+            for var_id in var_positions {
+                self.pattern[var_id] = root_node.clone();
+            }
+        } else {
+            // Cross-depth: splice an independently shifted copy per occurrence.
+            for &var_id in &var_positions {
+                let delta = depths[usize::from(var_id)] as i32 - ref_depth as i32;
+                let (shifted, shifted_root) = shift_extraction::<F, O>(extraction, root, delta);
+                self.splice_extraction_at(var_id, &shifted, shifted_root);
+            }
+        }
+    }
+
+    /// Appends one copy of postorder `extraction` (root at `root`) and writes
+    /// its remapped root node into `var_id`. Appends per call (no sharing), so
+    /// each cross-depth occurrence carries its own shifted indices.
+    fn splice_extraction_at(&mut self, var_id: Id, extraction: &[F::Apply<OpWithVar<O>>], root: Id) {
+        let n = extraction.len();
+        debug_assert_eq!(usize::from(root), n - 1, "splice_extraction_at: root must be the last node");
         let base = self.pattern.nodes.len();
-        let remap = |c: Id| {
-            let i = usize::from(c);
-            debug_assert!(i < n - 1, "concretize: extraction child references must skip the root");
-            Id::from(base + n - 2 - i)
-        };
+        let remap = |c: Id| Id::from(base + n - 2 - usize::from(c));
         for i in (0..n - 1).rev() {
             let mut clone = extraction[i].clone();
             for c in clone.children_mut() {
@@ -243,24 +281,7 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
         for c in root_node.children_mut() {
             *c = remap(*c);
         }
-        for var_id in var_positions {
-            self.pattern[var_id] = root_node.clone();
-        }
-    }
-
-    /// True iff `?#var_idx`'s occurrences sit at more than one binder depth (a
-    /// cross-depth reuse). Such a var can't be soundly collapsed to a concrete
-    /// term: its deep occurrence may reference a binder *shared* with (above)
-    /// the shallow one, in which case the deep reading is the shallow value
-    /// shifted — but the min-depth merge dropped the deep e-class, so we can't
-    /// tell that apart from a same-e-class capture (which needs no shift). A
-    /// real example: `list` abstraction `(lam (map (lam (?#0 $0)) $0))`, where
-    /// inlining turns an original `(car $1)` into `(car $0)`. So the search
-    /// gates literal-expansion and useless-inline on this.
-    pub fn is_cross_depth(&self, var_idx: usize) -> bool {
-        let depths = self.occurrence_depths();
-        let ids = &self.vars[var_idx];
-        ids.iter().any(|&id| depths[usize::from(id)] != depths[usize::from(ids[0])])
+        self.pattern[var_id] = root_node;
     }
 
     /// Appends `num_children` fresh child `Var` leaves named
@@ -293,6 +314,62 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
         }
         depth
     }
+}
+
+/// Shifts the De Bruijn index carried by a leaf discriminant up by `delta`,
+/// leaving structural discriminants and non-DB leaves untouched. Used when a
+/// cross-depth occurrence is expanded to a concrete DB-var leaf.
+fn shift_db_disc<F: LanguageFamily, O: StitchOp>(disc: F::Discriminant<O>, delta: i32) -> F::Discriminant<O> {
+    if delta == 0 {
+        return disc;
+    }
+    F::map_discriminant(disc, |leaf: O| match leaf.de_bruijn_index() {
+        Some(i) => O::make_db_var(i + delta).expect("DB-var leaf must reconstruct after shift"),
+        None => leaf,
+    })
+}
+
+/// Capture-aware copy of postorder `extraction` (root last) with every *free*
+/// DB index shifted up by `delta`; indices bound by a binder inside the
+/// extraction are left unchanged. Returns the new postorder list and its root
+/// index. Memoised on `(id, cutoff)`: a node reused at the same binder depth is
+/// shared, one reused at different depths is split. The cutoff bumps by one
+/// under each `binds_child` slot, matching `enode_fv`.
+fn shift_extraction<F: LanguageFamily, O: StitchOp>(extraction: &[F::Apply<OpWithVar<O>>], root: Id, delta: i32) -> (Vec<F::Apply<OpWithVar<O>>>, Id) {
+    let mut out: Vec<F::Apply<OpWithVar<O>>> = Vec::new();
+    let mut memo: FxHashMap<(Id, u32), Id> = FxHashMap::default();
+    let r = shift_extraction_rec::<F, O>(extraction, root, 0, delta, &mut out, &mut memo);
+    (out, r)
+}
+
+/// Recursive worker for [`shift_extraction`]: emits the shifted form of node
+/// `id` (whose free/bound boundary is `cutoff` binders) into `out`, returning
+/// its new postorder index.
+fn shift_extraction_rec<F: LanguageFamily, O: StitchOp>(extraction: &[F::Apply<OpWithVar<O>>], id: Id, cutoff: u32, delta: i32, out: &mut Vec<F::Apply<OpWithVar<O>>>, memo: &mut FxHashMap<(Id, u32), Id>) -> Id {
+    if let Some(&m) = memo.get(&(id, cutoff)) {
+        return m;
+    }
+    let node = &extraction[usize::from(id)];
+    let disc = node.discriminant();
+    let new_children: Vec<Id> = node
+        .children()
+        .iter()
+        .enumerate()
+        .map(|(j, &c)| {
+            let child_cutoff = cutoff + if disc.binds_child(j) { 1 } else { 0 };
+            shift_extraction_rec::<F, O>(extraction, c, child_cutoff, delta, out, memo)
+        })
+        .collect();
+    let new_disc = F::map_discriminant(disc, |leaf: OpWithVar<O>| match leaf.de_bruijn_index() {
+        // Free index (points above the extraction): shift to the new depth.
+        Some(i) if i >= cutoff as i32 => OpWithVar::make_db_var(i + delta).expect("DB-var leaf must reconstruct after shift"),
+        // Bound index or non-DB leaf: unchanged.
+        _ => leaf,
+    });
+    out.push(F::make(new_disc, new_children));
+    let new_id = Id::from(out.len() - 1);
+    memo.insert((id, cutoff), new_id);
+    new_id
 }
 
 impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {

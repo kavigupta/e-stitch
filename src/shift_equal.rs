@@ -19,7 +19,14 @@ pub fn shift_equal<L: StitchLanguage>(a: Id, b: Id, da: u32, db: u32, egraph: &S
     let b = egraph.find(b);
     let (lo, hi) = (da.min(db), da.max(db));
     if a == b {
-        return fv_outside_gap(egraph, a, lo, hi);
+        // Same captured e-class at both sites. At equal depth it's trivially the
+        // same value. Across a depth gap it is shift-equal-to-itself only when
+        // *closed*: a free index `$i` names a different binder at each depth
+        // (`$i` ≠ `$i + s`), so a non-closed same-e-class capture is NOT a
+        // genuine shift-variant — accepting it (the old `fv_outside_gap`
+        // shortcut) conflates distinct binders. Only structural (`a != b`)
+        // matches below are true shift-variants.
+        return da == db || egraph[a].data.fv.is_empty();
     }
     if da == db {
         return false;
@@ -133,24 +140,29 @@ mod tests {
     use super::shift_equal;
     use crate::lang::{LambdaCalcLanguage, Op, OpDB, StitchEgraph, StitchOp};
 
-    /// Why a cross-depth reuse can't be soundly collapsed to a concrete DB
-    /// leaf (and so must be gated — see `Pattern::is_cross_depth`): with the
-    /// *same* shallow capture `$0` and the *same* depths (3, 1), `shift_equal`
-    /// accepts both a deep `$0` (same e-class, via the `a == b` branch) and a
-    /// deep `$2` (a genuine shift-variant, via the structural branch). The
-    /// min-depth merge keeps only the shallow id, so an inline can no longer
-    /// tell whether the deep occurrence should become `$0` or `$2`. Both reuses
-    /// are valid while the var stays a (higher-order) metavar.
+    /// Only *genuine* shift-variants are cross-depth shift-equal. A non-closed
+    /// same-e-class pair at different depths (`$0`@3 vs `$0`@1) is **rejected**:
+    /// `$0` names a different binder at each depth (`$0` ≠ `$0 + s`), so it is
+    /// not the shift-up of itself. A true shift-variant (`$2`@3 vs `$0`@1, where
+    /// `$2 = $0 + (3-1)`) is accepted. This is what keeps every surviving
+    /// cross-depth reuse a real shift-variant, so the deeper occurrence is
+    /// always the shallow capture shifted by the depth gap — making
+    /// `Pattern::concretize`/`expand`'s per-occurrence shift sound.
     #[test]
-    fn cross_depth_reuse_is_inline_ambiguous() {
+    fn cross_depth_same_eclass_is_not_shift_equal() {
         let mut eg: StitchEgraph<LambdaCalcLanguage<OpDB<Op>>> = egg::EGraph::default();
         let e0 = eg.add(LambdaCalcLanguage::Leaf(OpDB::Var(0))); // `$0`, fv {0}
         let e2 = eg.add(LambdaCalcLanguage::Leaf(OpDB::Var(2))); // `$2`, fv {2}
+        let closed = eg.add(LambdaCalcLanguage::Leaf(OpDB::Node(Op::from_name("c")))); // closed
         eg.rebuild();
-        // A: deep `$0` accepted via `a == b` (fv {0} is below the gap [1, 3)).
-        assert!(shift_equal(e0, e0, 3, 1, &eg), "same-e-class cross-depth reuse");
-        // B: deep `$2` accepted via the structural shift ($2 = $0 + (3-1)).
-        assert!(shift_equal(e2, e0, 3, 1, &eg), "shift-variant cross-depth reuse");
+        // Same e-class, non-closed, different depths → NOT shift-equal.
+        assert!(!shift_equal(e0, e0, 3, 1, &eg), "non-closed same-e-class cross-depth must be rejected");
+        // Genuine shift-variant ($2 = $0 + 2) → shift-equal.
+        assert!(shift_equal(e2, e0, 3, 1, &eg), "true shift-variant accepted");
+        // Same e-class, equal depth → trivially equal.
+        assert!(shift_equal(e0, e0, 2, 2, &eg), "same depth, same e-class");
+        // Closed value is shift-invariant → equal at any depths.
+        assert!(shift_equal(closed, closed, 3, 1, &eg), "closed same-e-class cross-depth");
     }
 
     /// Build the cyclic reproducer e-graph and return `(R_d, R_s)`. `a_first`
