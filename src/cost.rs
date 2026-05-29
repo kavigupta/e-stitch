@@ -385,6 +385,9 @@ pub struct RewriteScratch {
 
 impl RewriteScratch {
     /// Refills the index map from `search_state`. Clears first; retains capacity.
+    /// Match-root ids are canonical by construction (see `MatchAtEClass`): they
+    /// originate from `egraph.classes()` and propagate unchanged through
+    /// `build_subset_matches`; the egraph isn't unioned during search.
     pub fn fill<F: LanguageFamily, O: StitchOp>(&mut self, search_state: &SearchState<F, O>) {
         self.eclass_to_match_idx.clear();
         for (i, m) in search_state.matches.iter().enumerate() {
@@ -457,6 +460,10 @@ pub fn compute_cost<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F::App
 /// downstream (`apply_abstraction`, `build_rewritten_egraph`) can use the
 /// same selection without redoing the optimisation.
 pub fn compute_cost_and_select<F: LanguageFamily, O: StitchOp>(egraph: &StitchEgraph<F::Apply<O>>, root: egg::Id, cache: &CostCache, scratch: &mut CostScratch, search_state: &SearchState<F, O>, check_slow: bool) -> CostSelection {
+    assert!(
+        !search_state.matches.is_empty(),
+        "compute_cost_and_select: search_state.matches is empty; a pattern with no matches has no rewrite candidates to optimise over. Callers (best_first, smc) must filter empty-match states before scoring."
+    );
     let candidates = enumerate_candidates::<F, O>(egraph, search_state);
     let weights = &egraph.analysis.weights;
     // Hoisted: fill once per cost call. `eclass_to_match_idx` depends only on
@@ -506,6 +513,9 @@ pub fn compute_body_size_with_ho<F: LanguageFamily, O: StitchOp>(pattern: &Patte
     base + ho_extra as usize
 }
 
+/// Tree-expanded size: DAG-shared subtrees are counted once per parent
+/// reference (e.g. `(+ a a a)` counts `a` three times). Matches the
+/// `var_occurrences` convention used throughout cost accounting.
 pub fn compute_recexpr_size<L: StitchLanguage>(rec_expr: &RecExpr<L>, ptr: Id, weights: &Weights) -> usize {
     let node = &rec_expr[ptr];
     node.discriminant().intrinsic_size(weights) as usize + node.children().iter().map(|&child| compute_recexpr_size::<L>(rec_expr, child, weights)).sum::<usize>()

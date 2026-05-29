@@ -70,13 +70,10 @@ fn target_is_free_db_var(dbidx: i32, d_k: u32) -> bool {
     (dbidx as u32) >= d_k
 }
 
-/// True iff `target` cannot be expanded to in a literal expansion: a DB-var
-/// leaf free above the pattern (index `≥ depth`) would reference a binder
-/// outside the abstraction. For a cross-depth var, `depth` is the *min* depth;
-/// a pattern-internal index `i < depth` is sound at every occurrence because
-/// `expand` shifts the spliced leaf to each occurrence's depth (every surviving
-/// cross-depth reuse is a genuine shift-variant — `shift_equal` rejects
-/// same-e-class cross-depth).
+/// True iff `target` can't be a literal expansion: a DB-var leaf free above the
+/// pattern (index `≥ depth`) references a binder outside the abstraction. A
+/// bound index `< depth` is fine even for a cross-depth var — `expand` shifts
+/// the leaf to each occurrence's depth.
 fn invalid_literal_expansion<L: Language>(target: &L, depth: u32) -> bool
 where
     L::Discriminant: StitchDisc,
@@ -299,12 +296,9 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
     /// canonical order, so it shouldn't bump the freeze cursor.
     ///
     /// Concretizations are applied in descending `var_idx` order so earlier
-    /// indices don't shift mid-loop. Cross-depth-reused vars are inlined too:
-    /// `Pattern::concretize` splices the size-minimal extraction shifted to each
-    /// occurrence's own depth. This is sound because every surviving cross-depth
-    /// reuse is a genuine shift-variant — `shift_equal` rejects same-e-class
-    /// cross-depth reuses, so the deeper occurrence really is the shallow
-    /// capture shifted up by the depth gap.
+    /// indices don't shift mid-loop. Cross-depth vars inline too: `concretize`
+    /// shifts the extraction to each occurrence's depth (sound — every surviving
+    /// cross-depth reuse is a genuine shift-variant).
     pub fn inline_useless_nonfrozen(&self, shared: &SharedSearchData<F, O>) -> Option<SearchState<F, O>> {
         let start = self.frozen_count.unwrap_or(0);
         let mut targets: Vec<(usize, Id)> = (start..self.pattern.vars.len()).filter_map(|k| self.useless_var_eclass(k, shared).map(|id| (k, id))).collect();
@@ -490,8 +484,9 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
         }
         for var_idx in 0..n {
             // Freezing rule: expanding `?#k` commits to never expanding any
-            // `?#j` with j < k; `max_arity` caps how many vars best-first will
-            // create. Both checks are no-ops for SMC (frozen_count = None,
+            // `?#j` with j < k; `max_arity` caps the eventual frozen_count
+            // (since a successful expand at var_idx raises fc to >= var_idx).
+            // Both checks are no-ops for SMC (frozen_count = None,
             // max_arity = usize::MAX).
             if var_idx > max_arity {
                 continue;
@@ -596,6 +591,10 @@ impl<F: LanguageFamily, O: StitchOp> std::fmt::Display for SearchState<F, O> {
 /// Computes how many times each e-class appears in the fully-expanded corpus tree.
 /// Top-down pass: root gets count 1, then propagate to children of the size-minimal
 /// enode (same rule as [`build_size_minimal_extraction`] and `WeightedSize`).
+///
+/// Heuristic: this only accounts for the pre-rewrite extraction. `RewriteAnalysis`
+/// may route through a non-minimal enode when a rewrite shrinks the result, so
+/// counts can under-attribute multiplicity at e-classes only reached that way.
 ///
 /// Canonical eclass ids are not necessarily in topological order after unions
 /// (a parent's canonical id can be lower than a child's), so we explicitly
