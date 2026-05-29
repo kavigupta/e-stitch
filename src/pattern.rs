@@ -1,5 +1,6 @@
 use crate::lang::{LanguageFamily, OpWithVar, StitchDisc, StitchLanguage, StitchOp};
 use crate::revexpr::RevExpr;
+use crate::shift::{shift_db_disc, shift_extraction};
 use egg::{Id, Language, RecExpr};
 use rustc_hash::FxHashMap;
 
@@ -251,60 +252,6 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
         }
         depth
     }
-}
-
-/// Shifts the De Bruijn index carried by a leaf discriminant up by `delta`,
-/// leaving structural discriminants and non-DB leaves untouched. Used when a
-/// cross-depth occurrence is expanded to a concrete DB-var leaf.
-fn shift_db_disc<F: LanguageFamily, O: StitchOp>(disc: F::Discriminant<O>, delta: i32) -> F::Discriminant<O> {
-    if delta == 0 {
-        return disc;
-    }
-    F::map_discriminant(disc, |leaf: O| match leaf.de_bruijn_index() {
-        Some(i) => O::make_db_var(i + delta).expect("DB-var leaf must reconstruct after shift"),
-        None => leaf,
-    })
-}
-
-/// Capture-aware copy of postorder `extraction` (root last): free DB indices
-/// shift up by `delta`, indices bound inside the extraction stay. Returns the
-/// new list and its root. Memoised on `(id, cutoff)`; cutoff bumps under each
-/// `binds_child` slot, matching `enode_fv`.
-fn shift_extraction<F: LanguageFamily, O: StitchOp>(extraction: &[F::Apply<OpWithVar<O>>], root: Id, delta: i32) -> (Vec<F::Apply<OpWithVar<O>>>, Id) {
-    let mut out: Vec<F::Apply<OpWithVar<O>>> = Vec::new();
-    let mut memo: FxHashMap<(Id, u32), Id> = FxHashMap::default();
-    let r = shift_extraction_rec::<F, O>(extraction, root, 0, delta, &mut out, &mut memo);
-    (out, r)
-}
-
-/// Recursive worker for [`shift_extraction`]: emits the shifted form of node
-/// `id` (whose free/bound boundary is `cutoff` binders) into `out`, returning
-/// its new postorder index.
-fn shift_extraction_rec<F: LanguageFamily, O: StitchOp>(extraction: &[F::Apply<OpWithVar<O>>], id: Id, cutoff: u32, delta: i32, out: &mut Vec<F::Apply<OpWithVar<O>>>, memo: &mut FxHashMap<(Id, u32), Id>) -> Id {
-    if let Some(&m) = memo.get(&(id, cutoff)) {
-        return m;
-    }
-    let node = &extraction[usize::from(id)];
-    let disc = node.discriminant();
-    let new_children: Vec<Id> = node
-        .children()
-        .iter()
-        .enumerate()
-        .map(|(j, &c)| {
-            let child_cutoff = cutoff + if disc.binds_child(j) { 1 } else { 0 };
-            shift_extraction_rec::<F, O>(extraction, c, child_cutoff, delta, out, memo)
-        })
-        .collect();
-    let new_disc = F::map_discriminant(disc, |leaf: OpWithVar<O>| match leaf.de_bruijn_index() {
-        // Free index (points above the extraction): shift to the new depth.
-        Some(i) if i >= cutoff as i32 => OpWithVar::make_db_var(i + delta).expect("DB-var leaf must reconstruct after shift"),
-        // Bound index or non-DB leaf: unchanged.
-        _ => leaf,
-    });
-    out.push(F::make(new_disc, new_children));
-    let new_id = Id::from(out.len() - 1);
-    memo.insert((id, cutoff), new_id);
-    new_id
 }
 
 impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
