@@ -29,9 +29,10 @@ pub struct Pattern<F: LanguageFamily, O: StitchOp> {
     /// different depths in the pattern).
     pub var_cross_depth: Vec<bool>,
     /// Syntactic occurrence count of `?#k`: how many times a walk from the
-    /// root visits a node holding `Var(k)`. DAG-shared positions count once
-    /// per parent reference, matching `compute_recexpr_size`'s semantics.
-    /// Maintained incrementally by `expand`/`reuse`.
+    /// root visits a node holding `Var(k)`. The pattern is a pure tree (no node
+    /// sharing), so this equals `vars[k].len()`; it is still tracked explicitly
+    /// because cost accounting reads it on the hot path. Maintained incrementally
+    /// by `expand`/`reuse`.
     pub var_occurrences: Vec<usize>,
     /// True iff `?#k` is in the freshest cohort. `expand` flips all
     /// pre-existing vars to false and inserts new children as true; `reuse`
@@ -66,6 +67,12 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
     /// Each new child meta-var inherits the parent's binder depth, plus one if
     /// `target.discriminant().binds_child(j)` is true for that slot — i.e., a
     /// `Lam` body bumps the depth of the meta-var that lands inside it.
+    ///
+    /// When `?#var_idx` occupies multiple positions (from a prior `reuse`), every
+    /// occurrence is expanded *independently*: each gets its own copy of the new
+    /// enode and its own freshly-created child nodes. The pattern stays a pure
+    /// tree — no node is shared between occurrences — so `vars[var_idx+j]` ends up
+    /// with one id per occurrence rather than a single DAG-shared id.
     pub fn expand(&mut self, var_idx: usize, target: &F::Apply<O>) {
         let var_positions = self.vars.remove(var_idx);
         let parent_depth = self.var_depth.remove(var_idx);
@@ -94,32 +101,37 @@ impl<F: LanguageFamily, O: StitchOp> Pattern<F, O> {
             }
         }
 
-        // Build the new enode with freshly-named Var children at positions var_idx..var_idx+k.
-        let mut new_children = Vec::with_capacity(num_children);
+        // Insert the `num_children` new var slots (names var_idx..var_idx+k).
+        // Positions are filled in below — one freshly-created node per occurrence
+        // of the expanded var, since we never share nodes across occurrences.
         for j in 0..num_children {
-            self.pattern.nodes.push(var_node::<F, O>((var_idx + j) as u32));
-            let new_id = Id::from(self.pattern.nodes.len() - 1);
-            new_children.push(new_id);
-            self.vars.insert(var_idx + j, vec![new_id]);
+            self.vars.insert(var_idx + j, Vec::with_capacity(var_positions.len()));
             let child_depth = parent_depth + if target_disc.binds_child(j) { 1 } else { 0 };
             self.var_depth.insert(var_idx + j, child_depth);
             // Children of a cross-depth-merged metavar inherit the property —
             // the multi-depth ambiguity persists down the expansion tree until
             // the slot is fully concretized.
             self.var_cross_depth.insert(var_idx + j, parent_cross);
-            // Each new child meta-var lives at one slot of the new enode, and
-            // the new enode replaces every occurrence of the parent var — so
-            // the syntactic walk visits each new child exactly `parent_occ` times.
+            // The new enode replaces every occurrence of the parent var, so the
+            // syntactic walk visits each new child exactly `parent_occ` times.
             self.var_occurrences.insert(var_idx + j, parent_occ);
             self.var_reusable.insert(var_idx + j, true);
         }
-        let new_node = F::make(F::map_discriminant(target_disc, OpWithVar::Node), new_children);
 
-        // Replace each position of the expanded var with the new enode. If the var
-        // had multiple positions (from a prior reuse), all parents share the same
-        // children via the RecExpr DAG.
+        // Expand each occurrence of the var independently: build its own enode
+        // with its own freshly-named Var children. No node is shared between
+        // occurrences, so a reused var deepens every copy separately and the
+        // pattern remains a pure tree.
         for var_id in var_positions {
-            self.pattern[var_id] = new_node.clone();
+            let mut new_children = Vec::with_capacity(num_children);
+            for j in 0..num_children {
+                self.pattern.nodes.push(var_node::<F, O>((var_idx + j) as u32));
+                let new_id = Id::from(self.pattern.nodes.len() - 1);
+                new_children.push(new_id);
+                self.vars[var_idx + j].push(new_id);
+            }
+            let new_node = F::make(F::map_discriminant(target_disc.clone(), OpWithVar::Node), new_children);
+            self.pattern[var_id] = new_node;
         }
     }
 
@@ -455,7 +467,7 @@ mod tests {
     }
 
     #[test]
-    fn expand_reused_var_preserves_dag_sharing() {
+    fn expand_reused_var_duplicates_subtree() {
         let mut p: Pattern<OpChildren, Op> = Pattern::single_var();
         p.expand(0, &op("+", 2)); // (+ ?#0 ?#1)
         p.reuse(0, 1); // (+ ?#0 ?#0)
@@ -465,12 +477,15 @@ mod tests {
         assert_eq!(p.vars.len(), 2);
         assert_vars_canonical(&p);
 
-        // The two new vars must each have a single RecExpr slot (DAG sharing),
-        // not one per tree occurrence.
-        assert_eq!(p.vars[0].len(), 1);
-        assert_eq!(p.vars[1].len(), 1);
-        // Syntactic occurrence count must reflect parent references (2), not
-        // the number of unique RecExpr ids (1) — see `compute_body_size_with_ho`.
+        // Each occurrence of the expanded var got its own copy of the new
+        // subtree, so each new var now has one RecExpr slot per tree occurrence
+        // (no DAG sharing).
+        assert_eq!(p.vars[0].len(), 2);
+        assert_eq!(p.vars[1].len(), 2);
+        // The new ids must be distinct nodes, not a single shared one.
+        assert_ne!(p.vars[0][0], p.vars[0][1]);
+        assert_ne!(p.vars[1][0], p.vars[1][1]);
+        // Syntactic occurrence count matches the number of positions (2 each).
         assert_eq!(p.var_occurrences, vec![2, 2]);
     }
 
