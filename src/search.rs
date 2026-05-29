@@ -483,8 +483,9 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
         }
         for var_idx in 0..n {
             // Freezing rule: expanding `?#k` commits to never expanding any
-            // `?#j` with j < k; `max_arity` caps how many vars best-first will
-            // create. Both checks are no-ops for SMC (frozen_count = None,
+            // `?#j` with j < k; `max_arity` caps the eventual frozen_count
+            // (since a successful expand at var_idx raises fc to >= var_idx).
+            // Both checks are no-ops for SMC (frozen_count = None,
             // max_arity = usize::MAX).
             if var_idx > max_arity {
                 continue;
@@ -590,6 +591,10 @@ impl<F: LanguageFamily, O: StitchOp> std::fmt::Display for SearchState<F, O> {
 /// Computes how many times each e-class appears in the fully-expanded corpus tree.
 /// Top-down pass: root gets count 1, then propagate to children of the size-minimal
 /// enode (same rule as [`build_size_minimal_extraction`] and `WeightedSize`).
+///
+/// Heuristic: this only accounts for the pre-rewrite extraction. `RewriteAnalysis`
+/// may route through a non-minimal enode when a rewrite shrinks the result, so
+/// counts can under-attribute multiplicity at e-classes only reached that way.
 ///
 /// Canonical eclass ids are not necessarily in topological order after unions
 /// (a parent's canonical id can be lower than a child's), so we explicitly

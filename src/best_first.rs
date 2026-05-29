@@ -260,6 +260,14 @@ pub fn best_first<F: LanguageFamily, O: StitchOp>(data: crate::shared::SharedDat
             // has reached the goal, and continuing risks overwriting `best`
             // with a cheaper non-matching pattern that slipped past the prefix
             // filter. Record this child as best and stop.
+            //
+            // NOTE: --follow mode is a reachability check — we only care that
+            // the target pattern is constructible via the expansions BFS/SMC
+            // has access to. Overwriting `best` with the follow-hit child even
+            // when its cost is worse than a previously-recorded best is
+            // intentional: the reported `best` in follow mode is "the follow
+            // target we reached", not "the cheapest pattern seen". Do not
+            // "fix" this by guarding the overwrite on `child_cost < best.cost`.
             let exact_follow_hit = shared.follow.as_ref().is_some_and(|f| crate::follow::matches_follow_serialized(&child_state, f, &shared.egraph));
 
             nodes.push(Node {
