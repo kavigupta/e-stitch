@@ -70,10 +70,7 @@ fn target_is_free_db_var(dbidx: i32, d_k: u32) -> bool {
     (dbidx as u32) >= d_k
 }
 
-/// True iff `target` can't be a literal expansion: a DB-var leaf free above the
-/// pattern (index `≥ depth`) references a binder outside the abstraction. A
-/// bound index `< depth` is fine even for a cross-depth var — `expand` shifts
-/// the leaf to each occurrence's depth.
+/// True iff `target` cannot be expanded to in a literal expansion.
 fn invalid_literal_expansion<L: Language>(target: &L, depth: u32) -> bool
 where
     L::Discriminant: StitchDisc,
