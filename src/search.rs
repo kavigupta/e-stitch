@@ -71,12 +71,12 @@ fn target_is_free_db_var(dbidx: i32, d_k: u32) -> bool {
 }
 
 /// True iff `target` cannot be expanded to in a literal expansion.
-fn invalid_literal_expansion<L: Language>(target: &L, depth: u32, cross_depth: bool) -> bool
+fn invalid_literal_expansion<L: Language>(target: &L, depth: u32) -> bool
 where
     L::Discriminant: StitchDisc,
 {
     let Some(dbidx) = target.discriminant().de_bruijn_index() else { return false };
-    cross_depth || target_is_free_db_var(dbidx, depth)
+    target_is_free_db_var(dbidx, depth)
 }
 
 /// A deterministic move taken at a search node: either expanding a pattern variable
@@ -293,14 +293,12 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
     /// canonical order, so it shouldn't bump the freeze cursor.
     ///
     /// Concretizations are applied in descending `var_idx` order so earlier
-    /// indices don't shift mid-loop. Cross-depth-reused vars are skipped:
-    /// their occurrences live at different pattern depths, so a single
-    /// DB-bearing literal can't be sound at every site — `shift_equal` may
-    /// accept the reuse purely on a context-fv check, so even a `useless`
-    /// reading here doesn't license collapsing both sites to one literal.
+    /// indices don't shift mid-loop. Cross-depth vars inline too: `concretize`
+    /// shifts the extraction to each occurrence's depth (sound — every surviving
+    /// cross-depth reuse is a genuine shift-variant).
     pub fn inline_useless_nonfrozen(&self, shared: &SharedSearchData<F, O>) -> Option<SearchState<F, O>> {
         let start = self.frozen_count.unwrap_or(0);
-        let mut targets: Vec<(usize, Id)> = (start..self.pattern.vars.len()).filter(|&k| !self.pattern.var_cross_depth[k]).filter_map(|k| self.useless_var_eclass(k, shared).map(|id| (k, id))).collect();
+        let mut targets: Vec<(usize, Id)> = (start..self.pattern.vars.len()).filter_map(|k| self.useless_var_eclass(k, shared).map(|id| (k, id))).collect();
         if targets.is_empty() {
             return None;
         }
@@ -496,7 +494,6 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
                 continue;
             }
             let d_k = self.pattern.var_depth[var_idx];
-            let cross_depth = self.pattern.var_cross_depth[var_idx];
             let mut shape_idx: FxHashMap<(F::Discriminant<O>, usize), usize> = FxHashMap::default();
             let mut shapes: Vec<((F::Discriminant<O>, usize), usize)> = Vec::new();
             for m in &self.matches {
@@ -504,7 +501,7 @@ impl<F: LanguageFamily, O: StitchOp> SearchState<F, O> {
                 for subst in &m.substs {
                     let eclass = &shared.egraph[subst.vars[var_idx]];
                     for node in &eclass.nodes {
-                        if invalid_literal_expansion(node, d_k, cross_depth) {
+                        if invalid_literal_expansion(node, d_k) {
                             continue;
                         }
                         let key = (node.discriminant(), node.children().len());
