@@ -601,3 +601,22 @@ fn ho_shared_lam_with_outer_context() {
 fn cross_depth_useless_inline() {
     check_fixture_bf_only("data/domains/ho-bugs/cross_depth_useless_inline.json", LAMBDA, true);
 }
+
+/// Regression (minimised from the `logo` domain): a cross-depth reuse that
+/// over-shifts a concrete DB-var leaf on inline. The three programs share the
+/// skeleton `(lam (logo_forLoop ?N (lam (lam (logo_FWRT ?A ?B $0))) $0))`,
+/// where the inner-loop accumulator `$0` (deep, binder depth 3) and the
+/// `logo_forLoop` init `$0` (shallow, binder depth 1) hash-cons to the *same*
+/// `$0` e-class. `shift_equal`'s `a == b` shortcut accepts merging them
+/// cross-depth (their fv `{0}` sits *below* the gap `[1, 3)`), even though the
+/// two `$0`s reference different binders. Best-first then dominance-reuses the
+/// two slots and inlines the merged (useless) var: the deep occurrence is
+/// shifted to `$2`, yielding the unsound
+/// `(lam (logo_forLoop ?#0 (lam (lam (logo_FWRT ?#1 (logo_DIVA logo_UA 4) $2))) $0))`.
+/// β-reduced, the abstraction puts `$2` where every original program has `$0`,
+/// so `check_equiv` rejects it. The fixture pins the *sound* output (deep `$0`);
+/// until the reuse is fixed this test fails on the `$2` mismatch.
+#[test]
+fn cross_depth_forloop_db_var_inline() {
+    check_fixture_bf_only("data/domains/ho-bugs/cross_depth_forloop_db_var_inline.json", LAMBDA, true);
+}
